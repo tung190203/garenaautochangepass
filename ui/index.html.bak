@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AutoTool Pro</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="app-shell">
+
+    <!-- ── Sidebar ── -->
+    <aside class="sidebar">
+      <div class="traffic-light-spacer"></div>
+
+      <div class="brand">
+        <div class="brand-icon">
+          <!-- Simple lightning bolt SVG -->
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-name">AutoTool</span>
+          <span class="brand-badge">PRO</span>
+        </div>
+      </div>
+
+      <div class="sidebar-divider"></div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-btn active" data-tab="runner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="5,3 19,12 5,21"/>
+          </svg>
+          <span>Runner</span>
+        </button>
+        <button class="nav-btn" data-tab="config">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          <span>Cấu hình</span>
+        </button>
+        <button class="nav-btn" data-tab="results">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10"/>
+            <line x1="12" y1="20" x2="12" y2="4"/>
+            <line x1="6" y1="20" x2="6" y2="14"/>
+          </svg>
+          <span>Kết quả</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div class="version-tag">v1.0.0</div>
+      </div>
+    </aside>
+
+    <!-- ── Main content ── -->
+    <main class="main-content">
+
+      <!-- ════ TAB: RUNNER ════ -->
+      <section class="tab-pane active" id="tab-runner">
+
+        <div class="content-header drag-region">
+          <div class="header-title">Runner</div>
+          <div class="header-right no-drag">
+            <div id="status-badge" class="status-badge idle">
+              <span class="status-dot"></span>
+              <span id="status-text">Sẵn sàng</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-row">
+          <div class="stat-item">
+            <div class="stat-num" id="stat-threads">0<span class="stat-den">/0</span></div>
+            <div class="stat-label">Luồng</div>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <div class="stat-num success" id="stat-success">0</div>
+            <div class="stat-label">Thành công</div>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <div class="stat-num error" id="stat-failed">0</div>
+            <div class="stat-label">Thất bại</div>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <div class="stat-num mono" id="stat-time">00:00</div>
+            <div class="stat-label">Thời gian</div>
+          </div>
+        </div>
+
+        <!-- Input bar -->
+        <div class="input-bar">
+          <div class="input-group url-group">
+            <span class="input-label">URL</span>
+            <input type="text" id="q-url" class="text-input" value="https://google.com" placeholder="https://..." spellcheck="false"/>
+          </div>
+          <div class="input-separator"></div>
+          <div class="input-group threads-group">
+            <span class="input-label">Luồng</span>
+            <input type="text" id="q-threads" class="text-input num-input" value="3" maxlength="3" inputmode="numeric"/>
+          </div>
+          <div class="input-group mode-group">
+            <span class="input-label">Chế độ</span>
+            <select id="q-headless" class="select-input">
+              <option value="false">Hiển thị</option>
+              <option value="true">Ẩn</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="action-row">
+          <button class="btn btn-run" id="btn-start">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><polygon points="5,3 19,12 5,21"/></svg>
+            Bắt đầu
+          </button>
+          <button class="btn btn-stop" id="btn-stop" disabled>
+            <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+            Dừng
+          </button>
+          <div class="action-spacer"></div>
+
+          <!-- Toggle: đóng trình duyệt sau khi xong -->
+          <label class="inline-check" id="label-close-browser" title="Bỏ chọn để giữ trình duyệt mở sau khi chạy xong">
+            <input type="checkbox" id="q-close-browser" checked/>
+            <span class="inline-check-box"></span>
+            <span class="inline-check-label">Tắt sau khi xong</span>
+          </label>
+
+          <button class="btn btn-ghost" id="btn-clear-log">Xóa log</button>
+          <button class="btn btn-ghost" id="btn-export">Xuất .txt</button>
+        </div>
+
+        <!-- Thread pills -->
+        <div class="thread-area" id="thread-area">
+          <span class="thread-empty">Chưa có luồng nào đang chạy</span>
+        </div>
+
+        <!-- Console -->
+        <div class="log-wrap">
+          <div class="log-toolbar">
+            <span class="log-title">
+              <span class="log-dot"></span>
+              Console
+            </span>
+            <div class="log-filter-group">
+              <button class="log-filter active" data-filter="all">Tất cả</button>
+              <button class="log-filter" data-filter="success">Success</button>
+              <button class="log-filter" data-filter="error">Error</button>
+            </div>
+          </div>
+          <div class="log-body" id="log-body">
+            <div class="log-entry info">
+              <span class="log-time">--:--:--</span>
+              <span class="log-msg">Cấu hình URL, số luồng và nhấn "Bắt đầu" để chạy.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════ TAB: CONFIG ════ -->
+      <section class="tab-pane" id="tab-config">
+        <div class="content-header drag-region">
+          <div class="header-title">Cấu hình</div>
+        </div>
+        <div class="config-scroll">
+
+          <div class="config-card">
+            <div class="card-header">Browser</div>
+            <div class="form-grid">
+              <div class="field span-2">
+                <label>URL mục tiêu</label>
+                <input type="text" id="c-url" class="text-input" value="https://sso.garena.com/universal/login?app_id=10100&redirect_uri=https%3A%2F%2Faccount.garena.com%2F&locale=vi-VN" spellcheck="false"/>
+              </div>
+              <div class="field">
+                <label>Slow Motion (ms)</label>
+                <input type="number" id="c-slowmo" class="text-input" value="0" min="0" max="5000"/>
+              </div>
+              <div class="field">
+                <label>Timeout (ms)</label>
+                <input type="number" id="c-timeout" class="text-input" value="30000" min="5000"/>
+              </div>
+            </div>
+          </div>
+
+          <div class="config-card">
+            <div class="card-header">
+              Proxy
+              <span class="card-sub">Mỗi thread dùng 1 proxy theo thứ tự</span>
+              <label class="toggle ml-auto">
+                <input type="checkbox" id="c-use-proxy"/>
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+            <div id="proxy-fields" class="proxy-hidden">
+              <div class="proxy-format-hint">
+                Định dạng hỗ trợ (mỗi dòng 1 proxy):<br/>
+                <code>http://ip:port</code> &nbsp;|&nbsp;
+                <code>ip:port</code> &nbsp;|&nbsp;
+                <code>http://user:pass@ip:port</code> &nbsp;|&nbsp;
+                <code>ip:port:user:pass</code>
+              </div>
+              <div class="proxy-drop-zone" id="proxy-drop-zone">
+                <textarea
+                  id="c-proxy-list"
+                  class="proxy-textarea"
+                  placeholder="Nhập proxy vào đây, mỗi dòng 1 proxy...&#10;Hoặc kéo thả file .txt vào đây"
+                  spellcheck="false"
+                ></textarea>
+                <div class="proxy-drop-overlay" id="proxy-drop-overlay">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  <span>Thả file .txt vào đây</span>
+                </div>
+              </div>
+              <div class="proxy-actions">
+                <button class="btn btn-ghost btn-sm" id="btn-load-proxy-file">Mở file .txt</button>
+                <button class="btn btn-ghost btn-sm" id="btn-clear-proxy">Xóa danh sách</button>
+                <span class="proxy-count" id="proxy-count">0 proxy</span>
+              </div>
+              <input type="file" id="proxy-file-input" accept=".txt" style="display:none"/>
+            </div>
+          </div>
+
+          <div class="config-card">
+            <div class="card-header">Output</div>
+            <div class="form-grid">
+              <div class="field span-3">
+                <label>Đường dẫn file kết quả</label>
+                <input type="text" id="c-output" class="text-input" value="output/result.txt"/>
+              </div>
+              <div class="field">
+                <label>Tự động xuất</label>
+                <select id="c-auto-export" class="select-input">
+                  <option value="true">Có</option>
+                  <option value="false">Không</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Accounts card ── -->
+          <div class="config-card">
+            <div class="card-header">
+              Tài khoản
+              <span class="card-sub">Mỗi thread dùng 1 tài khoản theo thứ tự</span>
+            </div>
+            <div class="proxy-format-hint">
+              Format: <code>username|password|email|apppassword</code>
+              &nbsp;— mỗi dòng 1 tài khoản
+            </div>
+            <div class="proxy-drop-zone" id="acc-drop-zone">
+              <textarea
+                id="c-acc-list"
+                class="proxy-textarea"
+                placeholder="user1|pass1|mail1@gmail.com|apppass1&#10;user2|pass2|mail2@gmail.com|apppass2&#10;Hoặc kéo thả file .txt vào đây"
+                spellcheck="false"
+              ></textarea>
+              <div class="proxy-drop-overlay" id="acc-drop-overlay">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span>Thả file .txt vào đây</span>
+              </div>
+            </div>
+            <div class="proxy-actions">
+              <button class="btn btn-ghost btn-sm" id="btn-load-acc-file">Mở file .txt</button>
+              <button class="btn btn-ghost btn-sm" id="btn-clear-acc">Xóa danh sách</button>
+              <span class="proxy-count" id="acc-count">0 tài khoản</span>
+            </div>
+            <input type="file" id="acc-file-input" accept=".txt" style="display:none"/>
+          </div>
+
+          <!-- ── Login selector card ── -->
+          <div class="config-card">
+            <div class="card-header">
+              Selector Form Đăng nhập
+              <span class="card-sub">CSS selector của các ô input trên trang</span>
+            </div>
+            <div class="form-grid">
+              <div class="field span-2">
+                <label>Selector ô Username / Email</label>
+                <input type="text" id="c-sel-user" class="text-input" placeholder='input[name="username"]' spellcheck="false"/>
+              </div>
+              <div class="field span-2">
+                <label>Selector ô Password</label>
+                <input type="text" id="c-sel-pass" class="text-input" placeholder='input[name="password"]' spellcheck="false"/>
+              </div>
+              <div class="field span-2">
+                <label>Selector nút Submit (tuỳ chọn)</label>
+                <input type="text" id="c-sel-submit" class="text-input" placeholder='button[type="submit"]' spellcheck="false"/>
+              </div>
+              <div class="field">
+                <label>Delay sau điền (ms)</label>
+                <input type="number" id="c-sel-delay" class="text-input" value="500" min="0"/>
+              </div>
+              <div class="field">
+                <label>Chờ sau submit (ms)</label>
+                <input type="number" id="c-sel-wait" class="text-input" value="2000" min="0"/>
+              </div>
+            </div>
+          </div>
+
+          <button class="btn btn-run" id="btn-save-config">Lưu cấu hình</button>
+        </div>
+      </section>
+
+      <!-- ════ TAB: RESULTS ════ -->
+      <section class="tab-pane" id="tab-results">
+        <div class="content-header drag-region">
+          <div class="header-title">Kết quả</div>
+          <div class="header-right no-drag">
+            <button class="btn btn-ghost btn-sm" id="btn-clear-results">Xóa</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Account</th>
+                <th>URL</th>
+                <th>Trạng thái</th>
+                <th>Chi tiết</th>
+                <th>Thời gian</th>
+              </tr>
+            </thead>
+            <tbody id="results-body">
+              <tr class="empty-row"><td colspan="6">Chưa có kết quả nào</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

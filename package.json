@@ -1,0 +1,73 @@
+{
+  "name": "autotool-pro",
+  "version": "1.0.0",
+  "description": "Playwright Automation Tool with GUI",
+  "main": "main.js",
+  "author": "AutoTool",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:all": "electron-builder --mac --win"
+  },
+  "build": {
+    "appId": "com.autotool.pro",
+    "productName": "AutoTool Pro",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "ui/**/*",
+      "assets/**/*",
+      "node_modules/playwright/**/*",
+      "!node_modules/playwright/test/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "node_modules/playwright",
+        "to": "playwright",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "assets/icon.icns"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
+    }
+  },
+  "keywords": [
+    "playwright",
+    "automation",
+    "electron"
+  ],
+  "license": "ISC",
+  "dependencies": {
+    "playwright": "^1.40.0",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  },
+  "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^24.0.0"
+  }
+}

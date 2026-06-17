@@ -1,0 +1,26 @@
+{
+  "url": "https://sso.garena.com/universal/login?app_id=10100&redirect_uri=https%3A%2F%2Faccount.garena.com%2F&locale=vi-VN",
+  "threads": 1,
+  "headless": false,
+  "slowMo": 0,
+  "timeout": 30000,
+  "keepOpen": false,
+  "proxyList": [],
+  "accountList": [
+    {
+      "username": "bao.bid6115",
+      "password": "CPH@TWuso8hR",
+      "email": "bao.bid6115@otpgmail.com",
+      "apppassword": "qGBRl8s0F@jJ"
+    }
+  ],
+  "newPasswordFromUI": "Matkhaumoi@2026",
+  "loginSelectors": {
+    "username": "input[type=\"text\"], input[placeholder*=\"Garena\"]",
+    "password": "input[type=\"password\"]",
+    "submit": "button[type=\"submit\"], button.primary",
+    "delay": 800,
+    "waitAfter": 3000
+  },
+  "outputFile": "/Users/thanhtung/Desktop/mmo/changepassgarenatool/output/result.txt"
+}

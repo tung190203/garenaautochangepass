@@ -1,0 +1,14 @@
+/node_modules
+/public/js/ckfinder
+/public/uploads
+/public/vrtour
+/public/vrtour360
+/storage/*.key
+.env
+.phpunit.result.cache
+/.idea
+/.vscode
+composer.lock
+.DS_Store
+*.map
+automation_profiles
