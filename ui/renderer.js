@@ -1,4 +1,4 @@
-const { ipcRenderer } = require('electron');
+const { ipcRenderer, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -214,7 +214,6 @@ function getConfig() {
     keepOpen:      document.getElementById('c-keep-open').checked,
     proxyList,
     accountList,
-    newPasswordFromUI: document.getElementById('c-new-password') ? document.getElementById('c-new-password').value.trim() : "Matkhaumoi@2026",
     loginSelectors,
     outputFile:    autoExport ? path.resolve(rawOutput) : null,
   };
@@ -291,22 +290,6 @@ function addResult(r) {
   tbody.appendChild(tr);
 }
 
-// ── Export helper ──
-function doExport() {
-  if (!allResults.length) { addLog('Chưa có kết quả để xuất!', 'warning'); return; }
-  const rawOut = document.getElementById('c-output').value.trim() || 'output/result.txt';
-  const outPath = path.resolve(rawOut);
-  fs.mkdirSync(path.dirname(outPath), { recursive: true });
-  const lines = allResults.map(r =>
-    r.status === 'SUCCESS'
-      ? `[${r.time}] T${r.thread} | ✅ SUCCESS | ${r.url} | ${r.title}`
-      : `[${r.time}] T${r.thread} | ❌ FAILED  | ${r.url} | ${r.error}`
-  );
-  const content = `=== KẾT QUẢ - ${new Date().toLocaleString('vi-VN')} ===\n\n` + lines.join('\n') + '\n';
-  fs.writeFileSync(outPath, content, 'utf8');
-  addLog(`Xuất thành công → ${outPath}`, 'success');
-}
-
 // ── START ──
 document.getElementById('btn-start').addEventListener('click', () => {
   if (isRunning) return;
@@ -349,8 +332,21 @@ document.getElementById('btn-clear-log').addEventListener('click', () => {
   }
 });
 
-// ── Export ──
-document.getElementById('btn-export').addEventListener('click', doExport);
+// ── Open File ──
+document.getElementById('btn-open-file').addEventListener('click', async () => {
+  const rawOut = document.getElementById('c-output').value.trim() || 'output/result.txt';
+  const outPath = path.resolve(rawOut);
+  if (fs.existsSync(outPath)) {
+    try {
+      await shell.openPath(outPath);
+      addLog(`Đã mở file: ${outPath}`, 'info');
+    } catch (err) {
+      addLog(`Không thể mở file: ${err.message}`, 'error');
+    }
+  } else {
+    addLog('File kết quả chưa tồn tại!', 'warning');
+  }
+});
 
 // ── Clear results ──
 document.getElementById('btn-clear-results').addEventListener('click', () => {

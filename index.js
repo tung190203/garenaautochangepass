@@ -24,6 +24,35 @@ const ACCOUNT_LIST = [
 
 const delayRand = (min, max) => new Promise(res => setTimeout(res, Math.floor(Math.random() * (max - min + 1)) + min));
 
+function generateRandomPassword() {
+  const lower = 'abcdefghijklmnopqrstuvwxyz';
+  const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const num = '0123456789';
+  const special = '@';
+  
+  const length = Math.floor(Math.random() * (16 - 8 + 1)) + 8; // 8 to 16
+  
+  let pwd = [
+    lower[Math.floor(Math.random() * lower.length)],
+    upper[Math.floor(Math.random() * upper.length)],
+    num[Math.floor(Math.random() * num.length)],
+    special
+  ];
+  
+  const allChars = lower + upper + num + special;
+  for (let i = pwd.length; i < length; i++) {
+    pwd.push(allChars[Math.floor(Math.random() * allChars.length)]);
+  }
+  
+  // Shuffle array
+  for (let i = pwd.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pwd[i], pwd[j]] = [pwd[j], pwd[i]];
+  }
+  
+  return pwd.join('');
+}
+
 async function runThread(threadId) {
   // ── 0. BÓC TÁCH THÔNG TIN TÀI KHOẢN ──
   const rawAccount = ACCOUNT_LIST[(threadId - 1) % ACCOUNT_LIST.length];
@@ -49,6 +78,7 @@ async function runThread(threadId) {
   });
 
   const pageGarena = context.pages()[0] || await context.newPage();
+  let generatedPassword = '';
 
   try {
     // ── 1. ĐĂNG NHẬP GARENA SSO & KIỂM TRA SESSION CŨ ──
@@ -191,7 +221,8 @@ async function runThread(threadId) {
     // ── 7. MÀN HÌNH ĐỔI MẬT KHẨU MỚI ──
     await delayRand(3000, 5000);
     console.log(`[Thread ${threadId}] 🔐 Đang chờ màn hình đổi mật khẩu hiển thị...`);
-    const newPasswordFromUI = sharedConfig.newPasswordFromUI || "Matkhaumoi@2026"; 
+    generatedPassword = generateRandomPassword();
+    console.log(`[Thread ${threadId}] 🔑 Mật khẩu mới được tạo tự động: ${generatedPassword}`);
 
     const currentPassSelector = 'input[placeholder="Mật khẩu hiện tại"]';
     const newPassSelector = '#J-form-newpwd';
@@ -210,14 +241,14 @@ async function runThread(threadId) {
     console.log(`[Thread ${threadId}] ⌨️ Đang nhập mật khẩu mới...`);
     await pageGarena.locator(newPassSelector).click({ delay: Math.floor(Math.random() * 100) + 50 });
     await delayRand(300, 500);
-    await pageGarena.locator(newPassSelector).pressSequentially(newPasswordFromUI, { delay: Math.floor(Math.random() * 150) + 100 });
+    await pageGarena.locator(newPassSelector).pressSequentially(generatedPassword, { delay: Math.floor(Math.random() * 150) + 100 });
 
     await delayRand(1000, 2000);
 
     console.log(`[Thread ${threadId}] ⌨️ Đang xác nhận lại mật khẩu mới...`);
     await pageGarena.locator(confirmPassSelector).click({ delay: Math.floor(Math.random() * 100) + 50 });
     await delayRand(300, 500);
-    await pageGarena.locator(confirmPassSelector).pressSequentially(newPasswordFromUI, { delay: Math.floor(Math.random() * 120) + 80 });
+    await pageGarena.locator(confirmPassSelector).pressSequentially(generatedPassword, { delay: Math.floor(Math.random() * 120) + 80 });
 
     // ── 8. BẤM NÚT THAY ĐỔI ──
     await delayRand(1500, 3000); 

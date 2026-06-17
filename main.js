@@ -54,6 +54,10 @@ ipcMain.on('start-run', async (event, config) => {
 
   const { url, threads, headless, slowMo, timeout, proxyList, accountList, loginSelectors, outputFile, keepOpen } = config;
 
+  if (outputFile) {
+    try { fs.writeFileSync(outputFile, '', 'utf8'); } catch(e) {}
+  }
+
   const results = [];
   const sendLog = (msg, type = 'info') => {
     event.reply('log', { msg, type, time: new Date().toLocaleTimeString('vi-VN') });
@@ -80,6 +84,35 @@ ipcMain.on('start-run', async (event, config) => {
     if (parts.length === 4) return { server: `http://${parts[0]}:${parts[1]}`, username: parts[2], password: parts[3] };
     if (parts.length === 2) return { server: `http://${raw}` };
     return { server: raw };
+  }
+
+  function generateRandomPassword() {
+    const lower = 'abcdefghijklmnopqrstuvwxyz';
+    const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const num = '0123456789';
+    const special = '@';
+    
+    const length = Math.floor(Math.random() * (16 - 8 + 1)) + 8; // 8 to 16
+    
+    let pwd = [
+      lower[Math.floor(Math.random() * lower.length)],
+      upper[Math.floor(Math.random() * upper.length)],
+      num[Math.floor(Math.random() * num.length)],
+      special
+    ];
+    
+    const allChars = lower + upper + num + special;
+    for (let i = pwd.length; i < length; i++) {
+      pwd.push(allChars[Math.floor(Math.random() * allChars.length)]);
+    }
+    
+    // Shuffle array
+    for (let i = pwd.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pwd[i], pwd[j]] = [pwd[j], pwd[i]];
+    }
+    
+    return pwd.join('');
   }
 
   const runThread = async (threadId) => {
@@ -193,6 +226,7 @@ ipcMain.on('start-run', async (event, config) => {
       }
 
       // ── TIẾN TRÌNH XỬ LÝ CHUYỂN ĐỔI THÔNG TIN GARENA ──
+      let generatedPassword = '';
       if (url.includes('garena.com')) {
         const emailUser = account ? account.email : '';
         const emailPass = account ? account.apppassword : '';
@@ -284,7 +318,8 @@ ipcMain.on('start-run', async (event, config) => {
         await delayRand(3000, 5000);
         sendLog(`[Thread ${threadId}] 🔐 Đang chờ màn hình đổi mật khẩu hiển thị...`);
         
-        const newPasswordFromUI = config.newPasswordFromUI || "Matkhaumoi@2026"; 
+        generatedPassword = generateRandomPassword();
+        sendLog(`[Thread ${threadId}] 🔑 Mật khẩu mới được tạo tự động: ${generatedPassword}`, 'success');
 
         const currentPassSelector = 'input[placeholder="Mật khẩu hiện tại"]';
         const newPassSelector = '#J-form-newpwd';
@@ -302,13 +337,13 @@ ipcMain.on('start-run', async (event, config) => {
         sendLog(`[Thread ${threadId}] ⌨️ Đang nhập mật khẩu mới...`);
         await pageGarena.locator(newPassSelector).click({ delay: Math.floor(Math.random() * 100) + 50 });
         await delayRand(300, 500);
-        await pageGarena.locator(newPassSelector).pressSequentially(newPasswordFromUI, { delay: Math.floor(Math.random() * 150) + 100 });
+        await pageGarena.locator(newPassSelector).pressSequentially(generatedPassword, { delay: Math.floor(Math.random() * 150) + 100 });
         await delayRand(1000, 2000);
 
         sendLog(`[Thread ${threadId}] ⌨️ Đang xác nhận lại mật khẩu mới...`);
         await pageGarena.locator(confirmPassSelector).click({ delay: Math.floor(Math.random() * 100) + 50 });
         await delayRand(300, 500);
-        await pageGarena.locator(confirmPassSelector).pressSequentially(newPasswordFromUI, { delay: Math.floor(Math.random() * 120) + 80 });
+        await pageGarena.locator(confirmPassSelector).pressSequentially(generatedPassword, { delay: Math.floor(Math.random() * 120) + 80 });
 
         await delayRand(1500, 3000);
         sendLog(`[Thread ${threadId}] 💾 Bấm nút "Thay đổi"...`);
@@ -347,18 +382,27 @@ ipcMain.on('start-run', async (event, config) => {
       }
 
       const title = await pageGarena.title();
+      const finalTitle = generatedPassword ? `${title} (Pass mới: ${generatedPassword})` : title;
       const result = {
-        thread: threadId, url, title, status: 'SUCCESS',
+        thread: threadId, url, title: finalTitle, status: 'SUCCESS',
         account: account ? account.username : '',
+        oldAccountStr: account ? `${account.username}|${account.password}|${account.email}|${account.apppassword}` : '',
+        newAccountStr: account ? `${account.username}|${generatedPassword}|${account.email}|${account.apppassword}` : '',
         time: new Date().toLocaleString('vi-VN'),
       };
       results.push(result);
-      sendLog(`[Thread ${threadId}] OK — "${title}"`, 'success');
+      
+      if (outputFile && result.newAccountStr) {
+        try { fs.appendFileSync(outputFile, result.newAccountStr + '\n', 'utf8'); } catch(e) {}
+      }
+      
+      sendLog(`[Thread ${threadId}] OK — "${finalTitle}"`, 'success');
       event.reply('thread-done', { threadId, status: 'success' });
     } catch (err) {
       const result = {
         thread: threadId, url, status: 'FAILED', error: err.message,
         account: account ? account.username : '',
+        oldAccountStr: account ? `${account.username}|${account.password}|${account.email}|${account.apppassword}` : '',
         time: new Date().toLocaleString('vi-VN'),
       };
       results.push(result);
@@ -377,17 +421,6 @@ ipcMain.on('start-run', async (event, config) => {
 
   const tasks = Array.from({ length: threads }, (_, i) => runThread(i + 1));
   await Promise.allSettled(tasks);
-
-  if (outputFile) {
-    const lines = results.map(r =>
-      r.status === 'SUCCESS'
-        ? `[${r.time}] Thread ${r.thread} | ✅ SUCCESS | ${r.url} | Title: ${r.title}`
-        : `[${r.time}] Thread ${r.thread} | ❌ FAILED  | ${r.url} | Error: ${r.error}`
-    );
-    const content = `=== KẾT QUẢ CHẠY - ${new Date().toLocaleString('vi-VN')} ===\n\n` + lines.join('\n') + '\n';
-    fs.writeFileSync(outputFile, content, 'utf8');
-    sendLog(`Xuất kết quả → ${outputFile}`, 'success');
-  }
 
   const success = results.filter(r => r.status === 'SUCCESS').length;
   const failed = results.filter(r => r.status === 'FAILED').length;
