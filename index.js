@@ -77,6 +77,12 @@ async function runThread(threadId) {
     ignoreDefaultArgs: ['--enable-automation']
   });
 
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+    window.navigator.chrome = { runtime: {} };
+  });
+
   const pageGarena = context.pages()[0] || await context.newPage();
   let generatedPassword = '';
 
@@ -155,6 +161,28 @@ async function runThread(threadId) {
     }
 
     // ── 3. BẤM NÚT LẤY MÃ TRÊN GARENA (ĐÃ SỬA NHẮM TRÚNG ID CỨNG) ──
+    const emailDomain = emailUser.split('@')[1]?.toLowerCase() || '';
+    let previousLatestId = null;
+    let pageMail = null;
+
+    if (emailDomain === 'fviainboxes.com') {
+        const emailPrefix = emailUser.split('@')[0];
+        
+        console.log(`[Thread ${threadId}] 🌐 Mở tab fviainboxes.com để lấy cookie vượt Cloudflare...`);
+        pageMail = await context.newPage();
+        await pageMail.goto('https://fviainboxes.com/', { timeout: 30000, waitUntil: 'domcontentloaded' });
+        await delayRand(3000, 4000);
+        
+        try {
+            const preListRes = await context.request.get(`https://fviainboxes.com/messages?username=${emailPrefix}&domain=fviainboxes.com&_=${Date.now()}`);
+            const preListText = await preListRes.text();
+            const preListData = JSON.parse(preListText);
+            if (preListData && preListData.result && preListData.result.length > 0) {
+                previousLatestId = preListData.result[0].id;
+            }
+        } catch (e) {}
+    }
+
     console.log(`[Thread ${threadId}] 🔍 Nhắm mục tiêu chính xác ID '#J-getotp-trigger'...`);
     const layMaButton = pageGarena.locator('#J-getotp-trigger').first();
     
@@ -166,42 +194,171 @@ async function runThread(threadId) {
     console.log(`[Thread ${threadId}] 📩 Đã bấm kích hoạt nút "Lấy mã" chuẩn xác.`);
     await delayRand(2000, 3000);
 
-    // ── 4. MỞ TAB MỚI TRUY CẬP UNLIMITMAIL ──
-    console.log(`[Thread ${threadId}] 🌐 Đang mở Tab mới để vào Unlimitmail...`);
-    const pageMail = await context.newPage(); 
-    await pageMail.goto('https://unlimitmail.com/en/email', { timeout: CONFIG.TIMEOUT, waitUntil: 'networkidle' });
-    await delayRand(2000, 4000);
+    // ── 4. PHÂN NHÁNH LẤY OTP THEO DOMAIN ──
+    let otpCode = '';
 
-    const rawMailInput = `${emailUser}|${emailPass}`;
+    if (emailDomain === 'otpgmail.com' || emailDomain === 'gmail.com') {
+        console.log(`[Thread ${threadId}] 🌐 Đang mở Tab mới để vào Unlimitmail...`);
+        const pageMail = await context.newPage(); 
+        await pageMail.goto('https://unlimitmail.com/en/email', { timeout: CONFIG.TIMEOUT, waitUntil: 'networkidle' });
+        await delayRand(2000, 4000);
 
-    console.log(`[Thread ${threadId}] 📬 Điền thông tin vào ô qcList...`);
-    await pageMail.waitForSelector('#qcList', { timeout: 15000 });
-    await pageMail.locator('#qcList').click();
-    await delayRand(300, 600);
-    
-    await pageMail.locator('#qcList').fill(rawMailInput);
-    await delayRand(800, 1500);
+        const rawMailInput = `${emailUser}|${emailPass}`;
 
-    console.log(`[Thread ${threadId}] 🚀 Bấm Submit Mail...`);
-    await pageMail.waitForSelector('#qcSubmit', { timeout: 10000 });
-    await pageMail.locator('#qcSubmit').click({ delay: Math.floor(Math.random() * 100) + 50 });
+        console.log(`[Thread ${threadId}] 📬 Điền thông tin vào ô qcList...`);
+        await pageMail.waitForSelector('#qcList', { timeout: 15000 });
+        await pageMail.locator('#qcList').click();
+        await delayRand(300, 600);
+        
+        await pageMail.locator('#qcList').fill(rawMailInput);
+        await delayRand(800, 1500);
 
-    console.log(`[Thread ${threadId}] ⏳ Chờ 10 giây hệ thống nhận OTP...`);
-    await delayRand(8000, 12000);
+        console.log(`[Thread ${threadId}] 🚀 Bấm Submit Mail...`);
+        await pageMail.waitForSelector('#qcSubmit', { timeout: 10000 });
+        await pageMail.locator('#qcSubmit').click({ delay: Math.floor(Math.random() * 100) + 50 });
 
-    // ── 5. CÀO MÃ OTP THỰC TẾ & KIỂM TRA ĐIỀU KIỆN 8 SỐ ──
-    console.log(`[Thread ${threadId}] 🔍 Đang trích xuất mã OTP từ class code-cell...`);
-    await pageMail.waitForSelector('.code-cell', { timeout: 15000 });
-    
-    let otpCode = await pageMail.locator('.code-cell').innerText();
-    otpCode = otpCode.trim(); 
+        console.log(`[Thread ${threadId}] ⏳ Chờ 10 giây hệ thống nhận OTP...`);
+        await delayRand(8000, 12000);
 
-    if (!otpCode || !/^\d{8}$/.test(otpCode)) {
-        throw new Error(`Không lấy được mã OTP hợp lệ (Yêu cầu chính xác 8 chữ số). Nội dung cào được: "${otpCode}"`);
+        // ── 5. CÀO MÃ OTP THỰC TẾ & KIỂM TRA ĐIỀU KIỆN 8 SỐ ──
+        console.log(`[Thread ${threadId}] 🔍 Đang trích xuất mã OTP từ class code-cell...`);
+        await pageMail.waitForSelector('.code-cell', { timeout: 15000 });
+        
+        otpCode = await pageMail.locator('.code-cell').innerText();
+        otpCode = otpCode.trim(); 
+
+        if (!otpCode || !/^\d{8}$/.test(otpCode)) {
+            throw new Error(`Không lấy được mã OTP hợp lệ (Yêu cầu chính xác 8 chữ số). Nội dung cào được: "${otpCode}"`);
+        }
+
+        console.log(`[Thread ${threadId}] 🎫 Lấy OTP thành công thực tế: [${otpCode}]`);
+        await pageMail.close();
+    } else if (emailDomain === 'fextemp.com') {
+        console.log(`[Thread ${threadId}] 🌐 Đang xử lý email fextemp.com qua tempmail.plus...`);
+        const pageMail = await context.newPage();
+        await pageMail.goto('https://tempmail.plus/en/#!', { timeout: CONFIG.TIMEOUT, waitUntil: 'networkidle' });
+        await delayRand(2000, 4000);
+
+        const emailPrefix = emailUser.split('@')[0];
+        
+        console.log(`[Thread ${threadId}] 📬 Điền prefix email vào ô pre_button...`);
+        await pageMail.waitForSelector('#pre_button', { timeout: 15000 });
+        await pageMail.locator('#pre_button').click({ delay: Math.floor(Math.random() * 100) + 50 });
+        await delayRand(200, 400);
+        await pageMail.locator('#pre_button').fill(emailPrefix);
+        await delayRand(500, 1000);
+
+        console.log(`[Thread ${threadId}] 🖱 Bấm mở dropdown domain...`);
+        await pageMail.locator('#domain').click({ delay: Math.floor(Math.random() * 100) + 50 });
+        await delayRand(500, 1000);
+        
+        console.log(`[Thread ${threadId}] 🖱 Tìm và chọn domain ${emailDomain}...`);
+        const domainItem = pageMail.locator(`.dropdown-menu button:has-text("${emailDomain}")`).first();
+        await domainItem.scrollIntoViewIfNeeded();
+        await domainItem.click({ delay: Math.floor(Math.random() * 100) + 50 });
+        await delayRand(2000, 4000);
+
+        console.log(`[Thread ${threadId}] ⏳ Chờ 10-15s để hộp thư đồng bộ...`);
+        await delayRand(10000, 15000);
+        
+        console.log(`[Thread ${threadId}] 🔍 Mở email đầu tiên trong inbox...`);
+        await pageMail.waitForSelector('.inbox .mail', { timeout: 30000 });
+        await pageMail.locator('.inbox .mail').first().click({ delay: Math.floor(Math.random() * 100) + 50 });
+        
+        console.log(`[Thread ${threadId}] ⏳ Đợi 3-5s để nội dung email load...`);
+        await delayRand(3000, 5000);
+        
+        console.log(`[Thread ${threadId}] 🔍 Trích xuất mã OTP...`);
+        await pageMail.waitForSelector('#info', { timeout: 15000 });
+        const mailBodyText = await pageMail.locator('#info').innerText();
+        const otpMatch = mailBodyText.match(/\b\d{8}\b/);
+
+        if (!otpMatch) {
+            throw new Error(`Không tìm thấy mã OTP hợp lệ trong nội dung thư Fextemp. Nội dung: "${mailBodyText.substring(0, 100)}..."`);
+        }
+        otpCode = otpMatch[0];
+
+        console.log(`[Thread ${threadId}] 🎫 Lấy OTP thành công thực tế: [${otpCode}]`);
+        await pageMail.close();
+    } else if (emailDomain === 'fviainboxes.com') {
+        console.log(`[Thread ${threadId}] 🌐 Đang xử lý email fviainboxes.com (API Direct Mode)...`);
+        const emailPrefix = emailUser.split('@')[0];
+
+        console.log(`[Thread ${threadId}] ⏳ Chờ 3-5s để Garena gửi email OTP...`);
+        await delayRand(3000, 5000);
+
+        let foundId = null;
+        let mailBodyText = "";
+        
+        for (let i = 1; i <= 6; i++) {
+            console.log(`[Thread ${threadId}] 🔍 Lấy danh sách email qua API (Thử lần ${i})...`);
+            const listRes = await context.request.get(`https://fviainboxes.com/messages?username=${emailPrefix}&domain=fviainboxes.com&_=${Date.now()}`);
+            const listText = await listRes.text();
+            
+            try {
+                const listData = JSON.parse(listText);
+                if (listData && listData.result && listData.result.length > 0) {
+                    const currentLatestId = listData.result[0].id;
+                    
+                    let isNewMail = false;
+                    if (previousLatestId !== null) {
+                        isNewMail = (currentLatestId !== previousLatestId);
+                    } else {
+                        const ageInSeconds = Math.abs(Math.floor(Date.now() / 1000) - listData.result[0].createdAt);
+                        isNewMail = (ageInSeconds < 120);
+                    }
+                    
+                    if (isNewMail) {
+                        foundId = currentLatestId;
+                        console.log(`[Thread ${threadId}] ⚡ Đã thấy email MỚI TINH với ID: ${foundId}`);
+                        break;
+                    } else {
+                        console.log(`[Thread ${threadId}] ⚠️ Hộp thư chưa có mail mới (Vẫn là mail cũ). Đang đợi...`);
+                    }
+                }
+            } catch (e) {}
+
+            if (i < 6) {
+                console.log(`[Thread ${threadId}] ⏳ Chưa thấy email mới, chờ thêm 5s...`);
+                await delayRand(5000, 7000);
+            }
+        }
+
+        if (!foundId) {
+            throw new Error('Timeout: Không nhận được email mã OTP từ fviainboxes');
+        }
+
+        console.log(`[Thread ${threadId}] 🔍 Đang kéo nội dung email qua API...`);
+        const msgRes = await context.request.get(`https://fviainboxes.com/message?username=${emailPrefix}&domain=fviainboxes.com&id=${foundId}`);
+        const msgText = await msgRes.text();
+        
+        let plainText = msgText;
+        try {
+            const msgData = JSON.parse(msgText);
+            let rawHtml = "";
+            if (typeof msgData === 'string') {
+                rawHtml = msgData;
+            } else {
+                rawHtml = msgData.html || msgData.body || msgData.content || msgText;
+            }
+            plainText = rawHtml.replace(/<[^>]*>?/gm, ''); // Xóa toàn bộ thẻ HTML
+        } catch (e) {
+            plainText = msgText.replace(/<[^>]*>?/gm, '');
+        }
+        
+        const otpMatch = plainText.match(/\b\d{8}\b/);
+
+        if (!otpMatch) {
+            if (pageMail) await pageMail.close().catch(()=>{});
+            throw new Error(`Không tìm thấy mã OTP hợp lệ trong thư. Nội dung: "${plainText.substring(0, 100)}..."`);
+        }
+        otpCode = otpMatch[0];
+
+        console.log(`[Thread ${threadId}] 🎫 Lấy OTP qua API thành công: [${otpCode}]`);
+        if (pageMail) await pageMail.close().catch(()=>{});
+    } else {
+        throw new Error(`Domain email không được hỗ trợ: ${emailDomain}`);
     }
-
-    console.log(`[Thread ${threadId}] 🎫 Lấy OTP thành công thực tế: [${otpCode}]`);
-    await pageMail.close();
 
     // ── 6. QUAY LẠI TAB GARENA ĐỂ ĐIỀN OTP ──
     console.log(`[Thread ${threadId}] 🔄 Quay lại Tab Garena để điền mã xác thực...`);

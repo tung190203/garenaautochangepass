@@ -8,13 +8,12 @@
   "proxyList": [],
   "accountList": [
     {
-      "username": "bao.bid6115",
-      "password": "CPH@TWuso8hR",
-      "email": "bao.bid6115@otpgmail.com",
-      "apppassword": "qGBRl8s0F@jJ"
+      "username": "xyzx.893",
+      "password": "Thaongoc1369@",
+      "email": "jyjyvcyx2ojl@fviainboxes.com",
+      "apppassword": ""
     }
   ],
-  "newPasswordFromUI": "Matkhaumoi@2026",
   "loginSelectors": {
     "username": "input[type=\"text\"], input[placeholder*=\"Garena\"]",
     "password": "input[type=\"password\"]",
