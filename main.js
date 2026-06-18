@@ -126,16 +126,57 @@ ipcMain.on('start-run', async (event, config) => {
     const userDataDir = path.join(__dirname, 'automation_profiles', `thread_${threadId}`);
     const isNewProfile = !fs.existsSync(userDataDir);
 
+    // ── TẠO VÀ LƯU FINGERPRINT ẢO ──
+    if (!fs.existsSync(userDataDir)) {
+      fs.mkdirSync(userDataDir, { recursive: true });
+    }
+    const fingerprintFile = path.join(userDataDir, 'fingerprint.json');
+    let fp = {};
+    if (fs.existsSync(fingerprintFile)) {
+      try { fp = JSON.parse(fs.readFileSync(fingerprintFile, 'utf8')); } catch (e) {}
+    }
+    
+    if (!fp.userAgent) {
+      // Các độ phân giải từ Laptop trở lên
+      const viewports = [
+        {width: 1366, height: 768}, {width: 1440, height: 900}, {width: 1536, height: 864}, 
+        {width: 1920, height: 1080}, {width: 2560, height: 1440}
+      ];
+      // Một số User-Agent phổ biến hiện nay
+      const uas = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+      ];
+      
+      fp = {
+        viewport: viewports[Math.floor(Math.random() * viewports.length)],
+        userAgent: uas[Math.floor(Math.random() * uas.length)],
+        hardwareConcurrency: [4, 8, 12, 16][Math.floor(Math.random() * 4)],
+        deviceMemory: [4, 8, 16, 32][Math.floor(Math.random() * 4)],
+        canvasNoise: { 
+          r: Math.floor(Math.random() * 5), g: Math.floor(Math.random() * 5), 
+          b: Math.floor(Math.random() * 5), a: (Math.random() * 0.05).toFixed(3) 
+        }
+      };
+      fs.writeFileSync(fingerprintFile, JSON.stringify(fp, null, 2), 'utf8');
+      sendLog(`[Thread ${threadId}] 🛡️ Tạo mới Fingerprint Ảo (Màn hình: ${fp.viewport.width}x${fp.viewport.height})`);
+    } else {
+      sendLog(`[Thread ${threadId}] 🛡️ Load lại Fingerprint cũ (Màn hình: ${fp.viewport.width}x${fp.viewport.height})`);
+    }
+
     const launchOptions = {
       headless,
       slowMo,
-      viewport: null, 
+      viewport: fp.viewport, // Fix cứng Viewport ảo
+      userAgent: fp.userAgent, // Gắn User-Agent ảo
       args: [
         '--disable-blink-features=AutomationControlled',
         '--disable-infobars',
         '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--start-maximized' 
+        '--disable-setuid-sandbox'
+        // Bỏ --start-maximized để trình duyệt ăn đúng Viewport đã set
       ],
       ignoreDefaultArgs: ['--enable-automation']
     };
@@ -158,6 +199,29 @@ ipcMain.on('start-run', async (event, config) => {
     try {
       context = await chromium.launchPersistentContext(userDataDir, launchOptions);
       activeContexts.push(context);
+
+      // ── INJECT SCRIPT FAKE PHẦN CỨNG SÂU XUỐNG NHÂN TRÌNH DUYỆT ──
+      await context.addInitScript((fingerprint) => {
+        // Fake Số CPU Core và Dung lượng RAM
+        Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => fingerprint.hardwareConcurrency });
+        Object.defineProperty(navigator, 'deviceMemory', { get: () => fingerprint.deviceMemory });
+
+        // Làm nhiễu Canvas (Thay đổi Hash của Canvas chống Tracking)
+        const originalGetContext = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function(type, ...args) {
+          const context = originalGetContext.apply(this, [type, ...args]);
+          if (type === '2d') {
+            const originalFillText = context.fillText;
+            context.fillText = function(...fillTextArgs) {
+              originalFillText.apply(this, fillTextArgs);
+              // Vẽ thêm 1 pixel mờ gần như vô hình để làm sai lệch mã Hash
+              this.fillStyle = `rgba(${fingerprint.canvasNoise.r}, ${fingerprint.canvasNoise.g}, ${fingerprint.canvasNoise.b}, ${fingerprint.canvasNoise.a})`;
+              this.fillRect(0, 0, 1, 1);
+            };
+          }
+          return context;
+        };
+      }, fp);
       
       const pageGarena = context.pages()[0] || await context.newPage();
       const delayRand = (min, max) => new Promise(res => setTimeout(res, Math.floor(Math.random() * (max - min + 1)) + min));
