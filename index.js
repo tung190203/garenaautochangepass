@@ -1,6 +1,7 @@
 const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
+const { solveTencentCaptcha } = require('./captchaSolver');
 
 // Đọc cấu hình từ UI (nếu có)
 let sharedConfig = {};
@@ -138,7 +139,11 @@ async function runThread(threadId) {
 
     console.log(`[Thread ${threadId}] 🔑 Bấm Đăng nhập...`);
     await pageGarena.locator(passwordSelector).press('Enter');
-    await delayRand(5000, 7000);
+    await delayRand(2000, 4000);
+
+    // ── XỬ LÝ CAPTCHA SAU KHI ĐĂNG NHẬP ──
+    const sendLogWrapper = (msg) => console.log(msg);
+    await solveTencentCaptcha(pageGarena, sendLogWrapper, threadId);
 
     // ── 2. CHUYỂN TRANG BẢO MẬT & CLICK Thay đổi Mật khẩu ──
     const securityUrl = 'https://account.garena.com/security';
@@ -158,6 +163,7 @@ async function runThread(threadId) {
         await delayRand(4000, 6000);
     } catch (err) {
         console.log(`[Thread ${threadId}] ⚠️ Không thấy nút "Thay đổi Mật khẩu" .`);
+        throw new Error('Đăng nhập thất bại hoặc bị văng (Không tìm thấy nút Thay đổi Mật khẩu).');
     }
 
     // ── 3. BẤM NÚT LẤY MÃ TRÊN GARENA (ĐÃ SỬA NHẮM TRÚNG ID CỨNG) ──

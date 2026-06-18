@@ -4,6 +4,41 @@ const { chromium } = require('playwright-extra');
 const stealth = require('puppeteer-extra-plugin-stealth')();
 chromium.use(stealth);
 const fs = require('fs');
+const { solveTencentCaptcha } = require('./captchaSolver');
+
+function getBrowserExecutablePath() {
+  try {
+    const isPackaged = app.isPackaged;
+    const browsersPath = isPackaged 
+      ? path.join(process.resourcesPath, 'playwright-browsers')
+      : path.join(__dirname, 'playwright-browsers ');
+
+    if (fs.existsSync(browsersPath)) {
+      const dirs = fs.readdirSync(browsersPath);
+      const chromiumDir = dirs.find(d => d.startsWith('chromium-'));
+      if (chromiumDir) {
+        const bundledPath64 = path.join(browsersPath, chromiumDir, 'chrome-win64', 'chrome.exe');
+        if (fs.existsSync(bundledPath64)) return bundledPath64;
+        
+        const bundledPath = path.join(browsersPath, chromiumDir, 'chrome-win', 'chrome.exe');
+        if (fs.existsSync(bundledPath)) return bundledPath;
+      }
+    }
+  } catch (e) {
+    console.error('Error finding bundled browser:', e);
+  }
+
+  const paths = [
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
+  ];
+  for (const p of paths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return undefined;
+}
 
 let mainWindow;
 
@@ -52,10 +87,18 @@ ipcMain.on('start-run', async (event, config) => {
   isRunning = true;
   activeContexts = [];
 
-  const { url, threads, headless, slowMo, timeout, proxyList, accountList, loginSelectors, outputFile, keepOpen } = config;
+  const { url, threads, headless, slowMo, timeout, proxyList, accountList, loginSelectors, outputDir, keepOpen } = config;
 
-  if (outputFile) {
-    try { fs.writeFileSync(outputFile, '', 'utf8'); } catch(e) {}
+  if (outputDir) {
+    try {
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
+      fs.writeFileSync(path.join(outputDir, 'success.txt'), '', 'utf8');
+      fs.writeFileSync(path.join(outputDir, 'error.txt'), '', 'utf8');
+    } catch(e) {
+      console.error('Error creating output dir:', e);
+    }
   }
 
   const results = [];
@@ -123,7 +166,7 @@ ipcMain.on('start-run', async (event, config) => {
       await new Promise(res => setTimeout(res, staggerDelay));
     }
 
-    const userDataDir = path.join(__dirname, 'automation_profiles', `thread_${threadId}`);
+    const userDataDir = path.join(app.getPath('userData'), 'automation_profiles', `thread_${threadId}`);
     const isNewProfile = !fs.existsSync(userDataDir);
 
     // ── TẠO VÀ LƯU FINGERPRINT ẢO ──
@@ -166,9 +209,11 @@ ipcMain.on('start-run', async (event, config) => {
       sendLog(`[Thread ${threadId}] 🛡️ Load lại Fingerprint cũ (Màn hình: ${fp.viewport.width}x${fp.viewport.height})`);
     }
 
+    const browserPath = getBrowserExecutablePath();
     const launchOptions = {
       headless,
       slowMo,
+      executablePath: browserPath,
       viewport: fp.viewport, // Fix cứng Viewport ảo
       userAgent: fp.userAgent, // Gắn User-Agent ảo
       args: [
@@ -358,8 +403,11 @@ ipcMain.on('start-run', async (event, config) => {
           
           await pageGarena.locator(loginSelectors.submit).click({ delay: rand(100, 200) });
           sendLog(`[Thread ${threadId}] Đã click Submit`);
-          await pageGarena.waitForTimeout(rand(4000, 6000)); 
+          await pageGarena.waitForTimeout(rand(2000, 4000)); 
         }
+        
+        // ── XỬ LÝ CAPTCHA SAU KHI ĐĂNG NHẬP ──
+        await solveTencentCaptcha(pageGarena, sendLog, threadId);
       }
 
       // ── TIẾN TRÌNH XỬ LÝ CHUYỂN ĐỔI THÔNG TIN GARENA ──
@@ -387,6 +435,7 @@ ipcMain.on('start-run', async (event, config) => {
             await delayRand(4000, 6000);
         } catch (err) {
             sendLog(`[Thread ${threadId}] ⚠️ Không thấy nút menu "Thay đổi Mật khẩu".`);
+            throw new Error('Đăng nhập thất bại hoặc bị văng (Không tìm thấy nút Thay đổi Mật khẩu).');
         }
 
         // ── 3. BẤM NÚT LẤY MÃ TRÊN GARENA (ĐÃ UPDATE CLICK THEO ID) ──
@@ -681,8 +730,12 @@ ipcMain.on('start-run', async (event, config) => {
       };
       results.push(result);
       
-      if (outputFile && result.newAccountStr) {
-        try { fs.appendFileSync(outputFile, result.newAccountStr + '\n', 'utf8'); } catch(e) {}
+      if (outputDir) {
+        if (result.status === 'SUCCESS' && result.newAccountStr) {
+          try { fs.appendFileSync(path.join(outputDir, 'success.txt'), result.newAccountStr + '\n', 'utf8'); } catch(e) {}
+        } else if (result.status === 'FAILED') {
+          try { fs.appendFileSync(path.join(outputDir, 'error.txt'), (result.oldAccountStr || result.account) + '\n', 'utf8'); } catch(e) {}
+        }
       }
       
       sendLog(`[Thread ${threadId}] OK — "${finalTitle}"`, 'success');

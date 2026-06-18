@@ -31,6 +31,13 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "playwright-browsers ",
+        "to": "playwright-browsers",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "mac": {
@@ -64,6 +71,7 @@
   "dependencies": {
     "playwright": "^1.40.0",
     "playwright-extra": "^4.3.6",
+    "png-to-ico": "^3.0.1",
     "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {

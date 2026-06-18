@@ -204,7 +204,7 @@ function getConfig() {
   };
 
   const autoExport = document.getElementById('c-auto-export').value === 'true';
-  const rawOutput = document.getElementById('c-output').value.trim() || 'output/result.txt';
+  const rawOutput = document.getElementById('c-output').value.trim() || 'output';
   return {
     url:           document.getElementById('q-url').value.trim() || 'https://google.com',
     threads:       parseInt(document.getElementById('q-threads').value) || 3,
@@ -215,7 +215,7 @@ function getConfig() {
     proxyList,
     accountList,
     loginSelectors,
-    outputFile:    autoExport ? path.resolve(rawOutput) : null,
+    outputDir:     autoExport ? path.resolve(rawOutput) : null,
   };
 }
 
@@ -332,10 +332,10 @@ document.getElementById('btn-clear-log').addEventListener('click', () => {
   }
 });
 
-// ── Open File ──
-document.getElementById('btn-open-file').addEventListener('click', async () => {
-  const rawOut = document.getElementById('c-output').value.trim() || 'output/result.txt';
-  const outPath = path.resolve(rawOut);
+// ── Open Files ──
+document.getElementById('btn-open-success').addEventListener('click', async () => {
+  const rawOut = document.getElementById('c-output').value.trim() || 'output';
+  const outPath = path.join(path.resolve(rawOut), 'success.txt');
   if (fs.existsSync(outPath)) {
     try {
       await shell.openPath(outPath);
@@ -344,7 +344,22 @@ document.getElementById('btn-open-file').addEventListener('click', async () => {
       addLog(`Không thể mở file: ${err.message}`, 'error');
     }
   } else {
-    addLog('File kết quả chưa tồn tại!', 'warning');
+    addLog('File thành công chưa tồn tại!', 'warning');
+  }
+});
+
+document.getElementById('btn-open-error').addEventListener('click', async () => {
+  const rawOut = document.getElementById('c-output').value.trim() || 'output';
+  const outPath = path.join(path.resolve(rawOut), 'error.txt');
+  if (fs.existsSync(outPath)) {
+    try {
+      await shell.openPath(outPath);
+      addLog(`Đã mở file: ${outPath}`, 'info');
+    } catch (err) {
+      addLog(`Không thể mở file: ${err.message}`, 'error');
+    }
+  } else {
+    addLog('File lỗi chưa tồn tại!', 'warning');
   }
 });
 
