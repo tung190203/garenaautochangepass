@@ -116,7 +116,15 @@ ipcMain.on('start-run', async (event, config) => {
   }
 
   const runThread = async (threadId) => {
+    // ── GIÃN CÁCH KHỞI ĐỘNG CÁC LUỒNG (Chống dính Captcha do spam request cùng 1 mili-giây) ──
+    const staggerDelay = (threadId - 1) * Math.floor(Math.random() * (6000 - 3000 + 1) + 3000); // Mỗi luồng chờ từ 3s - 6s nhân lên
+    if (staggerDelay > 0) {
+      sendLog(`[Thread ${threadId}] ⏳ Chờ giãn cách ${Math.round(staggerDelay/1000)}s trước khi mở trình duyệt...`, 'info');
+      await new Promise(res => setTimeout(res, staggerDelay));
+    }
+
     const userDataDir = path.join(__dirname, 'automation_profiles', `thread_${threadId}`);
+    const isNewProfile = !fs.existsSync(userDataDir);
 
     const launchOptions = {
       headless,
@@ -153,6 +161,71 @@ ipcMain.on('start-run', async (event, config) => {
       
       const pageGarena = context.pages()[0] || await context.newPage();
       const delayRand = (min, max) => new Promise(res => setTimeout(res, Math.floor(Math.random() * (max - min + 1)) + min));
+
+      // ── BƯỚC WARM-UP (NUÔI THREAD TRÁNH CAPTCHA) ──
+      if (isNewProfile) {
+        sendLog(`[Thread ${threadId}] 🆕 Profile MỚI: Bắt đầu quá trình nuôi 3-5 phút...`, 'warning');
+        try {
+          const warmUpTimeMs = Math.floor(Math.random() * (300000 - 180000 + 1)) + 180000; // 180s - 300s (3 đến 5 phút)
+          const startTime = Date.now();
+          
+          // DANH SÁCH LINK ĐÃ ĐƯỢC MỞ RỘNG (Đa dạng thể loại: Báo chí, TMĐT, Công nghệ, Giải trí)
+          const sites = [
+            // Công cụ tìm kiếm & Hệ sinh thái
+            'https://www.google.com', 
+            'https://www.youtube.com', 
+            'https://coccoc.com',
+            // Báo chí & Tin tức tổng hợp
+            'https://vnexpress.net', 
+            'https://dantri.com.vn', 
+            'https://tuoitre.vn', 
+            'https://thanhnien.vn', 
+            'https://vietnamnet.vn', 
+            'https://24h.com.vn', 
+            'https://kenh14.vn',
+            'https://vtv.vn',
+            // Thương mại điện tử (Tạo cookie mua sắm tăng Trust rất tốt)
+            'https://shopee.vn', 
+            'https://tiki.vn', 
+            'https://www.lazada.vn',
+            // Công nghệ & Điện máy
+            'https://thegioididong.com', 
+            'https://cellphones.com.vn', 
+            'https://tinhte.vn', 
+            'https://fptshop.com.vn',
+            // Thể thao & Giải trí
+            'https://thethao247.vn', 
+            'https://bongda24h.vn', 
+            'https://zingmp3.vn',
+            // Cộng đồng quốc tế phổ biến
+            'https://www.reddit.com',
+            'https://medium.com'
+          ];
+          
+          while (Date.now() - startTime < warmUpTimeMs) {
+            const randomSite = sites[Math.floor(Math.random() * sites.length)];
+            const timeRemaining = Math.round((warmUpTimeMs - (Date.now() - startTime)) / 1000);
+            sendLog(`[Thread ${threadId}] 🏃 Đọc báo ${randomSite} (Còn ~${timeRemaining}s)...`);
+            
+            // Truy cập trang web ngẫu nhiên
+            await pageGarena.goto(randomSite, { timeout: 30000, waitUntil: 'domcontentloaded' }).catch(() => {});
+            
+            // Giả lập hành vi người dùng: Đọc, Cuộn trang, Đọc tiếp
+            await delayRand(5000, 15000); // Lướt đọc 5-15s
+            await pageGarena.evaluate(() => window.scrollBy(0, Math.random() * 1000 + 500)).catch(() => {});
+            await delayRand(3000, 8000); // Đọc tiếp sau khi scroll
+          }
+          sendLog(`[Thread ${threadId}] ✅ Đã nuôi xong Profile mới!`, 'success');
+        } catch(e) {
+          sendLog(`[Thread ${threadId}] ⚠️ Lỗi trong quá trình nuôi (Bỏ qua)...`);
+        }
+      } else {
+        sendLog(`[Thread ${threadId}] 🔄 Profile CŨ (Đã có Trust): Chỉ warm-up nhanh vài giây...`);
+        try {
+          await pageGarena.goto('https://www.google.com', { timeout: 15000, waitUntil: 'domcontentloaded' });
+          await delayRand(1500, 3000);
+        } catch(e) {}
+      }
 
       sendLog(`[Thread ${threadId}] Mở ${url}...`);
       await pageGarena.goto(url, { timeout, waitUntil: 'networkidle' });
