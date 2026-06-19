@@ -87,10 +87,23 @@ async function runThread(threadId) {
   const pageGarena = context.pages()[0] || await context.newPage();
   let generatedPassword = '';
 
+  const safeGoto = async (pageObj, targetUrl, options, retries = 3) => {
+    for (let i = 1; i <= retries; i++) {
+      try {
+        await pageObj.goto(targetUrl, options);
+        return;
+      } catch (err) {
+        if (i === retries) throw err;
+        console.log(`[Thread ${threadId}] ⚠️ Lỗi tải trang (Lần ${i}): ${err.message}. Đang thử lại...`);
+        await delayRand(3000, 6000);
+      }
+    }
+  };
+
   try {
     // ── 1. ĐĂNG NHẬP GARENA SSO & KIỂM TRA SESSION CŨ ──
     console.log(`[Thread ${threadId}] 🌐 Truy cập Garena SSO...`);
-    await pageGarena.goto(CONFIG.TARGET_URL, { timeout: CONFIG.TIMEOUT, waitUntil: 'networkidle' });
+    await safeGoto(pageGarena, CONFIG.TARGET_URL, { timeout: CONFIG.TIMEOUT, waitUntil: 'networkidle' });
 
     let currentUrl = pageGarena.url();
     
@@ -107,11 +120,11 @@ async function runThread(threadId) {
             await delayRand(3000, 5000);
             
             console.log(`[Thread ${threadId}] 🔄 Tải lại trang Login chuẩn...`);
-            await pageGarena.goto(CONFIG.TARGET_URL, { timeout: CONFIG.TIMEOUT, waitUntil: 'networkidle' });
+            await safeGoto(pageGarena, CONFIG.TARGET_URL, { timeout: CONFIG.TIMEOUT, waitUntil: 'networkidle' });
         } catch (errClose) {
             console.log(`[Thread ${threadId}] ❌ Không click được Đăng xuất giao diện, tiến hành xóa cứng cookie...`);
             await context.clearCookies(); 
-            await pageGarena.goto(CONFIG.TARGET_URL, { timeout: CONFIG.TIMEOUT, waitUntil: 'networkidle' });
+            await safeGoto(pageGarena, CONFIG.TARGET_URL, { timeout: CONFIG.TIMEOUT, waitUntil: 'networkidle' });
         }
     }
 
@@ -201,7 +214,7 @@ async function runThread(threadId) {
     // ── 2. CHUYỂN TRANG BẢO MẬT & CLICK Thay đổi Mật khẩu ──
     const securityUrl = 'https://account.garena.com/security';
     console.log(`[Thread ${threadId}] 🔄 Chuyển sang trang Bảo mật...`);
-    await pageGarena.goto(securityUrl, { timeout: CONFIG.TIMEOUT, waitUntil: 'networkidle' });
+    await safeGoto(pageGarena, securityUrl, { timeout: CONFIG.TIMEOUT, waitUntil: 'networkidle' });
     await delayRand(1500, 3000);
 
     console.log(`[Thread ${threadId}] 🔍 Tìm nút menu "Thay đổi Mật khẩu"...`);
@@ -229,7 +242,7 @@ async function runThread(threadId) {
         
         console.log(`[Thread ${threadId}] 🌐 Mở tab fviainboxes.com để lấy cookie vượt Cloudflare...`);
         pageMail = await context.newPage();
-        await pageMail.goto('https://fviainboxes.com/', { timeout: 30000, waitUntil: 'domcontentloaded' });
+        await safeGoto(pageMail, 'https://fviainboxes.com/', { timeout: 30000, waitUntil: 'domcontentloaded' });
         await delayRand(3000, 4000);
         
         try {
@@ -259,7 +272,7 @@ async function runThread(threadId) {
     if (emailDomain === 'otpgmail.com' || emailDomain === 'gmail.com') {
         console.log(`[Thread ${threadId}] 🌐 Đang mở Tab mới để vào Unlimitmail...`);
         const pageMail = await context.newPage(); 
-        await pageMail.goto('https://unlimitmail.com/en/email', { timeout: CONFIG.TIMEOUT, waitUntil: 'networkidle' });
+        await safeGoto(pageMail, 'https://unlimitmail.com/en/email', { timeout: CONFIG.TIMEOUT, waitUntil: 'networkidle' });
         await delayRand(2000, 4000);
 
         const rawMailInput = `${emailUser}|${emailPass}`;
@@ -295,7 +308,7 @@ async function runThread(threadId) {
     } else if (emailDomain === 'fextemp.com') {
         console.log(`[Thread ${threadId}] 🌐 Đang xử lý email fextemp.com qua tempmail.plus...`);
         const pageMail = await context.newPage();
-        await pageMail.goto('https://tempmail.plus/en/#!', { timeout: CONFIG.TIMEOUT, waitUntil: 'networkidle' });
+        await safeGoto(pageMail, 'https://tempmail.plus/en/#!', { timeout: CONFIG.TIMEOUT, waitUntil: 'networkidle' });
         await delayRand(2000, 4000);
 
         const emailPrefix = emailUser.split('@')[0];
@@ -486,7 +499,7 @@ async function runThread(threadId) {
       console.log(`[Thread ${threadId}] 🔄 Trình duyệt tự chuyển hướng về: ${currentUrlAfterChange}`);
     } else {
       console.log(`[Thread ${threadId}] 🔄 Chủ động chuyển hướng về trang chủ account.garena.com...`);
-      await pageGarena.goto('https://account.garena.com/', { timeout: CONFIG.TIMEOUT, waitUntil: 'networkidle' });
+      await safeGoto(pageGarena, 'https://account.garena.com/', { timeout: CONFIG.TIMEOUT, waitUntil: 'networkidle' });
     }
 
     // CẬP NHẬT: Thay đổi selector cũ sang class điều hướng .hd-operation chuẩn để logout chính xác
