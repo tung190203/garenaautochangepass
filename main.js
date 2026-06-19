@@ -4,7 +4,8 @@ const { chromium } = require('playwright-extra');
 const stealth = require('puppeteer-extra-plugin-stealth')();
 chromium.use(stealth);
 const fs = require('fs');
-const { solveTencentCaptcha } = require('./captchaSolver');
+const { solveSimpleSlider } = require('./autoSlider');
+
 
 function getBrowserExecutablePath() {
   try {
@@ -158,6 +159,9 @@ ipcMain.on('start-run', async (event, config) => {
     return pwd.join('');
   }
 
+  const queue = accountList ? [...accountList] : [];
+  let processedCount = 0;
+
   const runThread = async (threadId) => {
     // ── GIÃN CÁCH KHỞI ĐỘNG CÁC LUỒNG (Chống dính Captcha do spam request cùng 1 mili-giây) ──
     const staggerDelay = (threadId - 1) * Math.floor(Math.random() * (6000 - 3000 + 1) + 3000); // Mỗi luồng chờ từ 3s - 6s nhân lên
@@ -166,8 +170,14 @@ ipcMain.on('start-run', async (event, config) => {
       await new Promise(res => setTimeout(res, staggerDelay));
     }
 
-    const userDataDir = path.join(app.getPath('userData'), 'automation_profiles', `thread_${threadId}`);
-    const isNewProfile = !fs.existsSync(userDataDir);
+    while (queue.length > 0 && isRunning) {
+      const account = queue.shift();
+      if (!account) break;
+      const currentIndex = processedCount++;
+
+      const safeUsername = account.username ? account.username.replace(/[^a-z0-9]/gi, '_') : 'unknown';
+      const userDataDir = path.join(app.getPath('userData'), 'automation_profiles', `profile_${safeUsername}`);
+      const isNewProfile = !fs.existsSync(userDataDir);
 
     // ── TẠO VÀ LƯU FINGERPRINT ẢO ──
     if (!fs.existsSync(userDataDir)) {
@@ -227,7 +237,7 @@ ipcMain.on('start-run', async (event, config) => {
     };
 
     if (proxyList && proxyList.length > 0) {
-      const raw = proxyList[(threadId - 1) % proxyList.length];
+      const raw = proxyList[currentIndex % proxyList.length];
       const proxy = parseProxy(raw);
       if (proxy) { 
         launchOptions.proxy = proxy; 
@@ -235,10 +245,7 @@ ipcMain.on('start-run', async (event, config) => {
       }
     }
 
-    const account = (accountList && accountList.length > 0)
-      ? accountList[(threadId - 1) % accountList.length]
-      : null;
-    if (account) sendLog(`[Thread ${threadId}] Account: ${account.username}`);
+    sendLog(`[Thread ${threadId}] Account: ${account.username}`);
 
     let context;
     try {
@@ -270,6 +277,19 @@ ipcMain.on('start-run', async (event, config) => {
       
       const pageGarena = context.pages()[0] || await context.newPage();
       const delayRand = (min, max) => new Promise(res => setTimeout(res, Math.floor(Math.random() * (max - min + 1)) + min));
+
+      const safeGoto = async (pageObj, targetUrl, options, retries = 3) => {
+        for (let i = 1; i <= retries; i++) {
+          try {
+            await pageObj.goto(targetUrl, options);
+            return;
+          } catch (err) {
+            if (i === retries) throw err;
+            sendLog(`[Thread ${threadId}] ⚠️ Lỗi tải trang (Lần ${i}): ${err.message}. Đang thử lại...`, 'warning');
+            await delayRand(3000, 6000);
+          }
+        }
+      };
 
       // ── BƯỚC WARM-UP (NUÔI THREAD TRÁNH CAPTCHA) ──
       if (isNewProfile) {
@@ -337,7 +357,7 @@ ipcMain.on('start-run', async (event, config) => {
       }
 
       sendLog(`[Thread ${threadId}] Mở ${url}...`);
-      await pageGarena.goto(url, { timeout, waitUntil: 'networkidle' });
+      await safeGoto(pageGarena, url, { timeout, waitUntil: 'networkidle' });
 
       // ── KIỂM TRA SESSION CŨ DÀNH RIÊNG CHO GARENA ──
       if (url.includes('garena.com')) {
@@ -355,11 +375,11 @@ ipcMain.on('start-run', async (event, config) => {
                 await delayRand(3000, 5000);
                 
                 sendLog(`[Thread ${threadId}] 🔄 Tải lại trang Login chuẩn...`);
-                await pageGarena.goto(url, { timeout, waitUntil: 'networkidle' });
+                await safeGoto(pageGarena, url, { timeout, waitUntil: 'networkidle' });
             } catch (errClose) {
                 sendLog(`[Thread ${threadId}] ❌ Không đăng xuất được bằng UI, tiến hành xóa cứng cookie...`);
                 await context.clearCookies(); 
-                await pageGarena.goto(url, { timeout, waitUntil: 'networkidle' });
+                await safeGoto(pageGarena, url, { timeout, waitUntil: 'networkidle' });
             }
         }
 
@@ -371,43 +391,118 @@ ipcMain.on('start-run', async (event, config) => {
       if (account && loginSelectors && (loginSelectors.username || loginSelectors.password)) {
         const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-        if (loginSelectors.username && account.username) {
-          await pageGarena.waitForSelector(loginSelectors.username, { timeout: 10000 });
-          await pageGarena.locator(loginSelectors.username).click({ delay: rand(80, 200) });
-          await pageGarena.waitForTimeout(rand(200, 500));
+        let loginAttempts = 0;
+        let loggedIn = false;
+
+        while (loginAttempts < 2 && !loggedIn) {
+          loginAttempts++;
+          sendLog(`[Thread ${threadId}] Bắt đầu quy trình đăng nhập (Lần ${loginAttempts})...`);
+
+          if (loginSelectors.username && account.username) {
+            await pageGarena.waitForSelector(loginSelectors.username, { timeout: 10000 });
+            await pageGarena.locator(loginSelectors.username).click({ delay: rand(80, 200) });
+            await pageGarena.waitForTimeout(rand(200, 500));
+            
+            // Xóa trắng ô username phòng trường hợp retry
+            await pageGarena.locator(loginSelectors.username).fill('');
+            await pageGarena.locator(loginSelectors.username).pressSequentially(account.username, {
+              delay: rand(80, 180) 
+            });
+            sendLog(`[Thread ${threadId}] Đã điền username: ${account.username}`);
+          }
           
-          await pageGarena.locator(loginSelectors.username).pressSequentially(account.username, {
-            delay: rand(80, 180) 
-          });
-          sendLog(`[Thread ${threadId}] Đã điền username: ${account.username}`);
-        }
-        
-        await pageGarena.waitForTimeout(rand(1000, 2200));
-        
-        if (loginSelectors.password && account.password) {
-          await pageGarena.waitForSelector(loginSelectors.password, { timeout: 10000 });
-          await pageGarena.locator(loginSelectors.password).click({ delay: rand(80, 200) });
-          await pageGarena.waitForTimeout(rand(200, 400));
+          await pageGarena.waitForTimeout(rand(1000, 2200));
           
-          await pageGarena.locator(loginSelectors.password).pressSequentially(account.password, {
-            delay: rand(100, 250) 
-          });
-          sendLog(`[Thread ${threadId}] Đã điền password`);
-        }
-        
-        if (loginSelectors.submit) {
-          await pageGarena.waitForTimeout(rand(800, 1800)); 
+          if (loginSelectors.password && account.password) {
+            await pageGarena.waitForSelector(loginSelectors.password, { timeout: 10000 });
+            await pageGarena.locator(loginSelectors.password).click({ delay: rand(80, 200) });
+            await pageGarena.waitForTimeout(rand(200, 400));
+            
+            // Xóa trắng ô password phòng trường hợp retry
+            await pageGarena.locator(loginSelectors.password).fill('');
+            await pageGarena.locator(loginSelectors.password).pressSequentially(account.password, {
+              delay: rand(100, 250) 
+            });
+            sendLog(`[Thread ${threadId}] Đã điền password`);
+          }
           
-          await pageGarena.locator(loginSelectors.submit).hover();
-          await pageGarena.waitForTimeout(rand(150, 400));
+          if (loginSelectors.submit) {
+            await pageGarena.waitForTimeout(rand(800, 1800)); 
+            
+            await pageGarena.locator(loginSelectors.submit).hover();
+            await pageGarena.waitForTimeout(rand(150, 400));
+            
+            await pageGarena.locator(loginSelectors.submit).click({ delay: rand(100, 200) });
+            sendLog(`[Thread ${threadId}] Đã click Submit`);
+            await pageGarena.waitForTimeout(rand(2000, 4000)); 
+          }
           
-          await pageGarena.locator(loginSelectors.submit).click({ delay: rand(100, 200) });
-          sendLog(`[Thread ${threadId}] Đã click Submit`);
-          await pageGarena.waitForTimeout(rand(2000, 4000)); 
-        }
-        
-        // ── XỬ LÝ CAPTCHA SAU KHI ĐĂNG NHẬP ──
-        await solveTencentCaptcha(pageGarena, sendLog, threadId);
+          // ── KIỂM TRA CAPTCHA SAU KHI SUBMIT ──
+          const captchaVisible = await pageGarena.locator('#tcaptcha_iframe').isVisible().catch(() => false);
+          if (captchaVisible) {
+            sendLog(`[Thread ${threadId}] ⚠️ Phát hiện Captcha. Đang thử tự động kéo...`, 'warning');
+            
+            // Gọi tool autoSlider
+            const autoSolved = await solveSimpleSlider(pageGarena, sendLog, threadId);
+            
+            if (!autoSolved) {
+                // Nếu kéo trượt bị lỗi, fallback về bắt người dùng giải tay
+                sendLog(`[Thread ${threadId}] ⚠️ Auto-Slider thất bại. Vui lòng TỰ GIẢI Captcha trên trình duyệt...`, 'warning');
+                try {
+                  // Chờ người dùng giải Captcha (Tối đa 5 phút)
+                  await pageGarena.waitForSelector('#tcaptcha_iframe', { state: 'hidden', timeout: 300000 });
+                  sendLog(`[Thread ${threadId}] ✅ Captcha đã biến mất. Đang kiểm tra kết quả...`, 'info');
+                  await pageGarena.waitForTimeout(3000); 
+                } catch (e) {
+                  throw new Error("Hết thời gian chờ (5 phút) không thấy giải Captcha.");
+                }
+            } else {
+                // Nếu auto kéo thành công
+                await pageGarena.waitForTimeout(3000); 
+            }
+          }
+          // ── CHỜ KẾT QUẢ ĐĂNG NHẬP ──
+          // ── CHỜ KẾT QUẢ ĐĂNG NHẬP ──
+          sendLog(`[Thread ${threadId}] ⏳ Đang chờ hệ thống chuyển hướng vào trang chủ...`);
+          try {
+            // Đợi tối đa 10s xem URL có chuyển sang account.garena.com không
+            await pageGarena.waitForURL(/account\.garena\.com/, { timeout: 10000 });
+          } catch (e) {
+            // Timeout - có thể do sai tài khoản/mật khẩu nên chưa nhảy trang
+          }
+          await pageGarena.waitForTimeout(2000); // Thêm 2s đệm để trang load hoàn toàn nếu vừa chuyển hướng
+
+          // ── KIỂM TRA KẾT QUẢ ĐĂNG NHẬP ──
+          const bodyText = await pageGarena.locator('body').innerText().catch(() => '');
+          const urlNow = pageGarena.url();
+          
+          // 1. Kiểm tra màn hình báo bot hoặc Proxy rác
+          if (bodyText.toLowerCase().includes('captcha blocked')) {
+            throw new Error("Lỗi Proxy: Proxy này chặn DNS hoặc bị blacklist không thể tải Captcha");
+          }
+          
+          const botKeywords = ['bất thường', 'phát hiện', 'suspicious', 'bị khóa', 'locked', 'khóa tài khoản'];
+          const isBotDetected = botKeywords.some(kw => bodyText.toLowerCase().includes(kw));
+          if (isBotDetected) {
+            throw new Error("Tài khoản bị chặn / Màn hình báo Bot");
+          }
+          
+          // 2. Đánh giá dựa trên URL hiện tại
+          if (urlNow.includes('account.garena.com') && !urlNow.includes('sso.garena.com/ui/login')) {
+            // Nếu đã vào được trang account.garena.com -> Đăng nhập thành công
+            loggedIn = true;
+            sendLog(`[Thread ${threadId}] 🎉 Đăng nhập thành công! URL hiện tại: ${urlNow}`);
+          } else {
+            // Nếu vẫn ở sso.garena.com hoặc bị văng ra link khác -> Đăng nhập thất bại
+            if (loginAttempts >= 2) {
+              throw new Error(`Đăng nhập thất bại sau 2 lần thử (URL kẹt ở: ${urlNow})`);
+            } else {
+              sendLog(`[Thread ${threadId}] 🔄 Đăng nhập thất bại (URL: ${urlNow}), đang thử lại lần 2...`, 'warning');
+              // Lặp lại vòng while để thử lại
+              await pageGarena.waitForTimeout(2000);
+            }
+          }
+        } // End of login loop
       }
 
       // ── TIẾN TRÌNH XỬ LÝ CHUYỂN ĐỔI THÔNG TIN GARENA ──
@@ -420,7 +515,7 @@ ipcMain.on('start-run', async (event, config) => {
         // ── 2. CHUYỂN TRANG BẢO MẬT & CLICK THAY ĐỔI MẬT KHẨU ──
         const securityUrl = 'https://account.garena.com/security';
         sendLog(`[Thread ${threadId}] 🔄 Chuyển sang trang Bảo mật...`);
-        await pageGarena.goto(securityUrl, { timeout, waitUntil: 'networkidle' });
+        await safeGoto(pageGarena, securityUrl, { timeout, waitUntil: 'networkidle' });
         await delayRand(1500, 3000);
 
         sendLog(`[Thread ${threadId}] 🔍 Tìm nút menu "Thay đổi Mật khẩu"...`);
@@ -448,7 +543,7 @@ ipcMain.on('start-run', async (event, config) => {
             
             sendLog(`[Thread ${threadId}] 🌐 Mở tab fviainboxes.com để lấy cookie vượt Cloudflare...`);
             pageMail = await context.newPage();
-            await pageMail.goto('https://fviainboxes.com/', { timeout: 30000, waitUntil: 'domcontentloaded' });
+            await safeGoto(pageMail, 'https://fviainboxes.com/', { timeout: 30000, waitUntil: 'domcontentloaded' });
             await delayRand(3000, 4000);
             
             try {
@@ -478,7 +573,7 @@ ipcMain.on('start-run', async (event, config) => {
         if (emailDomain === 'otpgmail.com' || emailDomain === 'gmail.com') {
             sendLog(`[Thread ${threadId}] 🌐 Đang mở Tab mới để vào Unlimitmail...`);
             const pageMail = await context.newPage();
-            await pageMail.goto('https://unlimitmail.com/en/email', { timeout, waitUntil: 'networkidle' });
+            await safeGoto(pageMail, 'https://unlimitmail.com/en/email', { timeout, waitUntil: 'networkidle' });
             await delayRand(2000, 4000);
 
             const rawMailInput = `${emailUser}|${emailPass}`;
@@ -513,7 +608,7 @@ ipcMain.on('start-run', async (event, config) => {
         } else if (emailDomain === 'fextemp.com') {
             sendLog(`[Thread ${threadId}] 🌐 Đang xử lý email fextemp.com qua tempmail.plus...`);
             const pageMail = await context.newPage();
-            await pageMail.goto('https://tempmail.plus/en/#!', { timeout, waitUntil: 'networkidle' });
+            await safeGoto(pageMail, 'https://tempmail.plus/en/#!', { timeout, waitUntil: 'networkidle' });
             await delayRand(2000, 4000);
 
             const emailPrefix = emailUser.split('@')[0];
@@ -699,7 +794,7 @@ ipcMain.on('start-run', async (event, config) => {
           sendLog(`[Thread ${threadId}] 🔄 Trình duyệt tự chuyển hướng về: ${currentUrlAfterChange}`);
         } else {
           sendLog(`[Thread ${threadId}] 🔄 Chủ động chuyển hướng về trang chủ account.garena.com...`);
-          await pageGarena.goto('https://account.garena.com/', { timeout, waitUntil: 'networkidle' });
+          await safeGoto(pageGarena, 'https://account.garena.com/', { timeout, waitUntil: 'networkidle' });
         }
         
         // CẬP NHẬT: Thay đổi selector đăng xuất UI ở luồng chính sang class chuẩn đích danh
@@ -754,14 +849,18 @@ ipcMain.on('start-run', async (event, config) => {
       if (!keepOpen) {
         if (context) await context.close();
         activeContexts = activeContexts.filter(c => c !== context);
-        sendLog(`[Thread ${threadId}] Đóng.`);
+        sendLog(`[Thread ${threadId}] Đóng phiên của ${account.username}.`);
       } else {
         sendLog(`[Thread ${threadId}] Giữ trình duyệt mở.`);
       }
-    }
+    } // End of finally
+
+    // Delay nhẹ giữa 2 account liên tiếp trên cùng 1 luồng
+    await new Promise(res => setTimeout(res, 2000));
+    } // End of while loop
   };
 
-  const tasks = Array.from({ length: threads }, (_, i) => runThread(i + 1));
+  const tasks = Array.from({ length: Math.min(threads, accountList ? accountList.length : 1) }, (_, i) => runThread(i + 1));
   await Promise.allSettled(tasks);
 
   const success = results.filter(r => r.status === 'SUCCESS').length;

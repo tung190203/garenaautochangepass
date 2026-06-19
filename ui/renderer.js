@@ -295,7 +295,7 @@ document.getElementById('btn-start').addEventListener('click', () => {
   if (isRunning) return;
   const config = getConfig();
   isRunning = true;
-  totalThreads = config.threads;
+  totalThreads = config.accountList && config.accountList.length > 0 ? config.accountList.length : config.threads;
   doneThreads = successCount = failedCount = 0;
 
   document.getElementById('btn-start').disabled = true;

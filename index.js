@@ -1,7 +1,7 @@
 const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
-const { solveTencentCaptcha } = require('./captchaSolver');
+const { solveSimpleSlider } = require('./autoSlider');
 
 // Đọc cấu hình từ UI (nếu có)
 let sharedConfig = {};
@@ -121,29 +121,82 @@ async function runThread(threadId) {
     const usernameSelector = 'input[type="text"]'; 
     const passwordSelector = 'input[type="password"]';
 
-    await pageGarena.waitForSelector(usernameSelector, { timeout: 10000 });
-    await pageGarena.locator(usernameSelector).click({ delay: Math.floor(Math.random() * 100) + 50 });
-    await delayRand(400, 800);
+    let loginAttempts = 0;
+    let loggedIn = false;
 
-    console.log(`[Thread ${threadId}] Điền tài khoản...`);
-    await pageGarena.locator(usernameSelector).pressSequentially(garenaUser, { delay: Math.floor(Math.random() * 120) + 80 });
-    await delayRand(1000, 2000);
+    while (loginAttempts < 2 && !loggedIn) {
+      loginAttempts++;
+      console.log(`[Thread ${threadId}] Bắt đầu quy trình đăng nhập (Lần ${loginAttempts})...`);
 
-    await pageGarena.waitForSelector(passwordSelector, { timeout: 10000 });
-    await pageGarena.locator(passwordSelector).click({ delay: Math.floor(Math.random() * 100) + 50 });
-    await delayRand(300, 600);
+      await pageGarena.waitForSelector(usernameSelector, { timeout: 10000 });
+      await pageGarena.locator(usernameSelector).click({ delay: Math.floor(Math.random() * 100) + 50 });
+      await delayRand(400, 800);
 
-    console.log(`[Thread ${threadId}] Điền mật khẩu...`);
-    await pageGarena.locator(passwordSelector).pressSequentially(garenaPass, { delay: Math.floor(Math.random() * 150) + 100 });
-    await delayRand(1500, 3000);
+      console.log(`[Thread ${threadId}] Điền tài khoản...`);
+      await pageGarena.locator(usernameSelector).fill('');
+      await pageGarena.locator(usernameSelector).pressSequentially(garenaUser, { delay: Math.floor(Math.random() * 120) + 80 });
+      await delayRand(1000, 2000);
 
-    console.log(`[Thread ${threadId}] 🔑 Bấm Đăng nhập...`);
-    await pageGarena.locator(passwordSelector).press('Enter');
-    await delayRand(2000, 4000);
+      await pageGarena.waitForSelector(passwordSelector, { timeout: 10000 });
+      await pageGarena.locator(passwordSelector).click({ delay: Math.floor(Math.random() * 100) + 50 });
+      await delayRand(300, 600);
 
-    // ── XỬ LÝ CAPTCHA SAU KHI ĐĂNG NHẬP ──
-    const sendLogWrapper = (msg) => console.log(msg);
-    await solveTencentCaptcha(pageGarena, sendLogWrapper, threadId);
+      console.log(`[Thread ${threadId}] Điền mật khẩu...`);
+      await pageGarena.locator(passwordSelector).fill('');
+      await pageGarena.locator(passwordSelector).pressSequentially(garenaPass, { delay: Math.floor(Math.random() * 150) + 100 });
+      await delayRand(1500, 3000);
+
+      console.log(`[Thread ${threadId}] 🔑 Bấm Đăng nhập...`);
+      await pageGarena.locator(passwordSelector).press('Enter');
+      await delayRand(2000, 4000);
+
+      // ── KIỂM TRA CAPTCHA SAU KHI SUBMIT ──
+      const captchaVisible = await pageGarena.locator('#tcaptcha_iframe').isVisible().catch(() => false);
+      if (captchaVisible) {
+        console.log(`[Thread ${threadId}] ⚠️ Phát hiện Captcha. Đang thử tự động kéo...`);
+        
+        // Tạo hàm wrapper cho log tương thích
+        const sendLogWrapper = (msg) => console.log(msg);
+        const autoSolved = await solveSimpleSlider(pageGarena, sendLogWrapper, threadId);
+        
+        if (!autoSolved) {
+            console.log(`[Thread ${threadId}] ⚠️ Auto-Slider thất bại. Vui lòng TỰ GIẢI Captcha trên trình duyệt...`);
+            try {
+              await pageGarena.waitForSelector('#tcaptcha_iframe', { state: 'hidden', timeout: 300000 });
+              console.log(`[Thread ${threadId}] ✅ Captcha đã biến mất. Đang kiểm tra kết quả...`);
+              await pageGarena.waitForTimeout(3000); 
+            } catch (e) {
+              throw new Error("Hết thời gian chờ (5 phút) không thấy giải Captcha.");
+            }
+        } else {
+            await pageGarena.waitForTimeout(3000); 
+        }
+      }
+
+      // ── KIỂM TRA KẾT QUẢ ĐĂNG NHẬP ──
+      const bodyText = await pageGarena.locator('body').innerText().catch(() => '');
+      const urlNow = pageGarena.url();
+      
+      const botKeywords = ['bất thường', 'phát hiện', 'suspicious', 'bị khóa', 'locked', 'khóa tài khoản'];
+      const isBotDetected = botKeywords.some(kw => bodyText.toLowerCase().includes(kw));
+      if (isBotDetected) {
+        throw new Error("Tài khoản bị chặn / Màn hình báo Bot");
+      }
+      
+      const isLoginStillVisible = await pageGarena.locator(usernameSelector).isVisible().catch(() => false);
+      if (isLoginStillVisible || urlNow.includes('sso.garena.com/ui/login')) {
+        if (loginAttempts >= 2) {
+          throw new Error("Đăng nhập thất bại sau 2 lần thử");
+        } else {
+          console.log(`[Thread ${threadId}] 🔄 Đăng nhập thất bại, đang thử lại lần 2...`);
+          await pageGarena.waitForTimeout(2000);
+        }
+      } else {
+        loggedIn = true;
+        console.log(`[Thread ${threadId}] 🎉 Đăng nhập thành công!`);
+      }
+    } // End of while loop
+
 
     // ── 2. CHUYỂN TRANG BẢO MẬT & CLICK Thay đổi Mật khẩu ──
     const securityUrl = 'https://account.garena.com/security';

@@ -19,6 +19,7 @@
     },
     "files": [
       "main.js",
+      "autoSlider.js",
       "ui/**/*",
       "assets/**/*",
       "node_modules/playwright/**/*",
