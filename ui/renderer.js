@@ -314,6 +314,22 @@ document.getElementById('btn-start').addEventListener('click', () => {
 // ── STOP ──
 document.getElementById('btn-stop').addEventListener('click', () => ipcRenderer.send('stop-run'));
 
+// ── CLEAR PROFILES ──
+document.getElementById('btn-clear-profiles').addEventListener('click', () => {
+  if (isRunning) { addLog('⚠️ Không thể xóa profiles khi đang chạy! Hãy dừng trước.', 'warning'); return; }
+  if (!confirm('⚠️ Xóa toàn bộ profiles?\n\nThao tác này sẽ xóa dữ liệu trình duyệt đã lưu (fingerprint, cookies...)\ncủa tất cả tài khoản. Lần chạy tiếp theo sẽ tạo profiles MỚI và nuôi lại từ đầu.\n\nBạn chắc chắn muốn xóa?')) return;
+  addLog('🗑️ Đang xóa toàn bộ profiles...', 'warning');
+  ipcRenderer.send('clear-profiles');
+});
+
+ipcRenderer.on('clear-profiles-done', (_, { success, msg }) => {
+  if (success) {
+    addLog(`✅ ${msg}`, 'success');
+  } else {
+    addLog(`❌ ${msg}`, 'error');
+  }
+});
+
 // ── Clear log ──
 document.getElementById('btn-clear-log').addEventListener('click', () => {
   // Clear log body

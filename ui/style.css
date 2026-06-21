@@ -415,6 +415,18 @@ html, body {
 }
 .btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-normal); }
 
+.btn-clear-profiles {
+  background: rgba(251,191,36,0.1);
+  color: var(--warning);
+  border: 1px solid rgba(251,191,36,0.25);
+  font-size: 12px;
+}
+.btn-clear-profiles:hover:not(:disabled) {
+  background: rgba(251,191,36,0.2);
+  border-color: rgba(251,191,36,0.5);
+  box-shadow: 0 0 8px rgba(251,191,36,0.15);
+}
+
 /* ══════════════════════════════════════
    THREAD AREA
 ══════════════════════════════════════ */

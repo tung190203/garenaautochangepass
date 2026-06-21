@@ -136,7 +136,7 @@ ipcMain.on('start-run', async (event, config) => {
     const num = '0123456789';
     const special = '@';
 
-    const length = Math.floor(Math.random() * (16 - 8 + 1)) + 8; // 8 to 16
+    const length = Math.floor(Math.random() * (16 - 8 + 1)) + 8;
 
     let pwd = [
       lower[Math.floor(Math.random() * lower.length)],
@@ -150,7 +150,6 @@ ipcMain.on('start-run', async (event, config) => {
       pwd.push(allChars[Math.floor(Math.random() * allChars.length)]);
     }
 
-    // Shuffle array
     for (let i = pwd.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [pwd[i], pwd[j]] = [pwd[j], pwd[i]];
@@ -163,8 +162,7 @@ ipcMain.on('start-run', async (event, config) => {
   let processedCount = 0;
 
   const runThread = async (threadId) => {
-    // ── GIÃN CÁCH KHỞI ĐỘNG CÁC LUỒNG (Chống dính Captcha do spam request cùng 1 mili-giây) ──
-    const staggerDelay = (threadId - 1) * Math.floor(Math.random() * (6000 - 3000 + 1) + 3000); // Mỗi luồng chờ từ 3s - 6s nhân lên
+    const staggerDelay = (threadId - 1) * Math.floor(Math.random() * (6000 - 3000 + 1) + 3000);
     if (staggerDelay > 0) {
       sendLog(`[Thread ${threadId}] ⏳ Chờ giãn cách ${Math.round(staggerDelay / 1000)}s trước khi mở trình duyệt...`, 'info');
       await new Promise(res => setTimeout(res, staggerDelay));
@@ -179,7 +177,6 @@ ipcMain.on('start-run', async (event, config) => {
       const userDataDir = path.join(app.getPath('userData'), 'automation_profiles', `profile_${safeUsername}`);
       const isNewProfile = !fs.existsSync(userDataDir);
 
-      // ── TẠO VÀ LƯU FINGERPRINT ẢO ──
       if (!fs.existsSync(userDataDir)) {
         fs.mkdirSync(userDataDir, { recursive: true });
       }
@@ -190,12 +187,10 @@ ipcMain.on('start-run', async (event, config) => {
       }
 
       if (!fp.userAgent) {
-        // Các độ phân giải từ Laptop trở lên
         const viewports = [
           { width: 1366, height: 768 }, { width: 1440, height: 900 }, { width: 1536, height: 864 },
           { width: 1920, height: 1080 }, { width: 2560, height: 1440 }
         ];
-        // Một số User-Agent phổ biến hiện nay
         const uas = [
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -224,14 +219,13 @@ ipcMain.on('start-run', async (event, config) => {
         headless,
         slowMo,
         executablePath: browserPath,
-        viewport: fp.viewport, // Fix cứng Viewport ảo
-        userAgent: fp.userAgent, // Gắn User-Agent ảo
+        viewport: fp.viewport,
+        userAgent: fp.userAgent,
         args: [
           '--disable-blink-features=AutomationControlled',
           '--disable-infobars',
           '--no-sandbox',
           '--disable-setuid-sandbox'
-          // Bỏ --start-maximized để trình duyệt ăn đúng Viewport đã set
         ],
         ignoreDefaultArgs: ['--enable-automation']
       };
@@ -252,13 +246,10 @@ ipcMain.on('start-run', async (event, config) => {
         context = await chromium.launchPersistentContext(userDataDir, launchOptions);
         activeContexts.push(context);
 
-        // ── INJECT SCRIPT FAKE PHẦN CỨNG SÂU XUỐNG NHÂN TRÌNH DUYỆT ──
         await context.addInitScript((fingerprint) => {
-          // Fake Số CPU Core và Dung lượng RAM
           Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => fingerprint.hardwareConcurrency });
           Object.defineProperty(navigator, 'deviceMemory', { get: () => fingerprint.deviceMemory });
 
-          // Làm nhiễu Canvas (Thay đổi Hash của Canvas chống Tracking)
           const originalGetContext = HTMLCanvasElement.prototype.getContext;
           HTMLCanvasElement.prototype.getContext = function (type, ...args) {
             const context = originalGetContext.apply(this, [type, ...args]);
@@ -266,7 +257,6 @@ ipcMain.on('start-run', async (event, config) => {
               const originalFillText = context.fillText;
               context.fillText = function (...fillTextArgs) {
                 originalFillText.apply(this, fillTextArgs);
-                // Vẽ thêm 1 pixel mờ gần như vô hình để làm sai lệch mã Hash
                 this.fillStyle = `rgba(${fingerprint.canvasNoise.r}, ${fingerprint.canvasNoise.g}, ${fingerprint.canvasNoise.b}, ${fingerprint.canvasNoise.a})`;
                 this.fillRect(0, 0, 1, 1);
               };
@@ -291,44 +281,21 @@ ipcMain.on('start-run', async (event, config) => {
           }
         };
 
-        // ── BƯỚC WARM-UP (NUÔI THREAD TRÁNH CAPTCHA) ──
         if (isNewProfile) {
           sendLog(`[Thread ${threadId}] 🆕 Profile MỚI: Bắt đầu quá trình nuôi 3-5 phút...`, 'warning');
           try {
-            const warmUpTimeMs = Math.floor(Math.random() * (300000 - 180000 + 1)) + 180000; // 180s - 300s (3 đến 5 phút)
+            const warmUpTimeMs = Math.floor(Math.random() * (300000 - 180000 + 1)) + 180000;
             const startTime = Date.now();
 
-            // DANH SÁCH LINK ĐÃ ĐƯỢC MỞ RỘNG (Đa dạng thể loại: Báo chí, TMĐT, Công nghệ, Giải trí)
             const sites = [
-              // Công cụ tìm kiếm & Hệ sinh thái
-              'https://www.google.com',
-              'https://www.youtube.com',
-              'https://coccoc.com',
-              // Báo chí & Tin tức tổng hợp
-              'https://vnexpress.net',
-              'https://dantri.com.vn',
-              'https://tuoitre.vn',
-              'https://thanhnien.vn',
-              'https://vietnamnet.vn',
-              'https://24h.com.vn',
-              'https://kenh14.vn',
-              'https://vtv.vn',
-              // Thương mại điện tử (Tạo cookie mua sắm tăng Trust rất tốt)
-              'https://shopee.vn',
-              'https://tiki.vn',
-              'https://www.lazada.vn',
-              // Công nghệ & Điện máy
-              'https://thegioididong.com',
-              'https://cellphones.com.vn',
-              'https://tinhte.vn',
-              'https://fptshop.com.vn',
-              // Thể thao & Giải trí
-              'https://thethao247.vn',
-              'https://bongda24h.vn',
-              'https://zingmp3.vn',
-              // Cộng đồng quốc tế phổ biến
-              'https://www.reddit.com',
-              'https://medium.com'
+              'https://www.google.com', 'https://www.youtube.com', 'https://coccoc.com',
+              'https://vnexpress.net', 'https://dantri.com.vn', 'https://tuoitre.vn',
+              'https://thanhnien.vn', 'https://vietnamnet.vn', 'https://24h.com.vn',
+              'https://kenh14.vn', 'https://vtv.vn', 'https://shopee.vn',
+              'https://tiki.vn', 'https://www.lazada.vn', 'https://thegioididong.com',
+              'https://cellphones.com.vn', 'https://tinhte.vn', 'https://fptshop.com.vn',
+              'https://thethao247.vn', 'https://bongda24h.vn', 'https://zingmp3.vn',
+              'https://www.reddit.com', 'https://medium.com'
             ];
 
             while (Date.now() - startTime < warmUpTimeMs) {
@@ -336,13 +303,11 @@ ipcMain.on('start-run', async (event, config) => {
               const timeRemaining = Math.round((warmUpTimeMs - (Date.now() - startTime)) / 1000);
               sendLog(`[Thread ${threadId}] 🏃 Đọc báo ${randomSite} (Còn ~${timeRemaining}s)...`);
 
-              // Truy cập trang web ngẫu nhiên
               await pageGarena.goto(randomSite, { timeout: 30000, waitUntil: 'domcontentloaded' }).catch(() => { });
 
-              // Giả lập hành vi người dùng: Đọc, Cuộn trang, Đọc tiếp
-              await delayRand(5000, 15000); // Lướt đọc 5-15s
+              await delayRand(5000, 15000);
               await pageGarena.evaluate(() => window.scrollBy(0, Math.random() * 1000 + 500)).catch(() => { });
-              await delayRand(3000, 8000); // Đọc tiếp sau khi scroll
+              await delayRand(3000, 8000);
             }
             sendLog(`[Thread ${threadId}] ✅ Đã nuôi xong Profile mới!`, 'success');
           } catch (e) {
@@ -359,13 +324,11 @@ ipcMain.on('start-run', async (event, config) => {
         sendLog(`[Thread ${threadId}] Mở ${url}...`);
         await safeGoto(pageGarena, url, { timeout, waitUntil: 'networkidle' });
 
-        // ── KIỂM TRA SESSION CŨ DÀNH RIÊNG CHO GARENA ──
         if (url.includes('garena.com')) {
           let currentUrl = pageGarena.url();
           if (!currentUrl.includes('universal/login') && currentUrl.includes('garena.com')) {
             sendLog(`[Thread ${threadId}] ⚠️ Session cũ đang đăng nhập sẵn! Tiến hành dọn dẹp...`);
 
-            // CẬP NHẬT: Thay đổi selector dọn dẹp ban đầu sang class chuẩn
             const dangXuatKhuVucCu = pageGarena.locator('a.hd-operation:has-text("Đăng xuất")').first();
             try {
               await dangXuatKhuVucCu.waitFor({ state: 'visible', timeout: 5000 });
@@ -387,7 +350,6 @@ ipcMain.on('start-run', async (event, config) => {
           sendLog(`[Thread ${threadId}] ✅ Màn hình Login đã sẵn sàng! Title: "${title}"`);
         }
 
-        // ── Điền form đăng nhập giả lập hành vi con người ──
         if (account && loginSelectors && (loginSelectors.username || loginSelectors.password)) {
           const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
@@ -396,14 +358,13 @@ ipcMain.on('start-run', async (event, config) => {
 
           while (loginAttempts < 2 && !loggedIn) {
             loginAttempts++;
-            sendLog(`[Thread ${threadId}] Bắt đầu quy trình đăng nhập (Lần ${loginAttempts})...`);
+            sendLog(`[Thread ${threadId}] Bắt đầu quy trình đăng nhập (Lần ${loginAttempts}/2)...`);
 
             if (loginSelectors.username && account.username) {
               await pageGarena.waitForSelector(loginSelectors.username, { timeout: 10000 });
               await pageGarena.locator(loginSelectors.username).click({ delay: rand(80, 200) });
-              await pageGarena.waitForTimeout(rand(200, 500));
+              await pageGarena.waitForTimeout(rand(200, 400));
 
-              // Xóa trắng ô username phòng trường hợp retry
               await pageGarena.locator(loginSelectors.username).fill('');
               await pageGarena.locator(loginSelectors.username).pressSequentially(account.username, {
                 delay: rand(80, 180)
@@ -418,7 +379,6 @@ ipcMain.on('start-run', async (event, config) => {
               await pageGarena.locator(loginSelectors.password).click({ delay: rand(80, 200) });
               await pageGarena.waitForTimeout(rand(200, 400));
 
-              // Xóa trắng ô password phòng trường hợp retry
               await pageGarena.locator(loginSelectors.password).fill('');
               await pageGarena.locator(loginSelectors.password).pressSequentially(account.password, {
                 delay: rand(100, 250)
@@ -437,46 +397,61 @@ ipcMain.on('start-run', async (event, config) => {
               await pageGarena.waitForTimeout(rand(2000, 4000));
             }
 
-            // ── KIỂM TRA CAPTCHA SAU KHI SUBMIT ──
-            const captchaVisible = await pageGarena.locator('#tcaptcha_iframe').isVisible().catch(() => false);
-            if (captchaVisible) {
-              sendLog(`[Thread ${threadId}] ⚠️ Phát hiện Captcha. Đang thử tự động kéo...`, 'warning');
+            // ── CẬP NHẬT: PHÁT HIỆN TẦNG SÂU DATADOME QUA TEXT HƯỚNG DẪN CHUẨN XÁC ──
+            sendLog(`[Thread ${threadId}] 🔍 Đang quét kiểm tra hệ thống bảo mật DataDome...`);
 
-              // Gọi tool autoSlider
+            const captchaVisible = await Promise.any([
+              pageGarena.waitForSelector('text="Slide right to secure your access"', { state: 'visible', timeout: 5000 }).then(() => true).catch(() => false),
+              pageGarena.waitForSelector('text="Kéo sang phải"', { state: 'visible', timeout: 5000 }).then(() => true).catch(() => false),
+              pageGarena.waitForSelector('div[class*="captcha"]', { state: 'visible', timeout: 5000 }).then(() => true).catch(() => false),
+              pageGarena.waitForSelector('iframe', { state: 'visible', timeout: 5000 }).then(() => true).catch(() => false)
+            ]);
+
+            if (captchaVisible) {
+              sendLog(`[Thread ${threadId}] ⚠️ Phát hiện cấu trúc Captcha đã hiển thị! Đang xử lý kéo...`, 'warning');
+
               const autoSolved = await solveSimpleSlider(pageGarena, sendLog, threadId);
 
               if (!autoSolved) {
-                // Nếu kéo trượt bị lỗi, fallback về bắt người dùng giải tay
                 sendLog(`[Thread ${threadId}] ⚠️ Auto-Slider thất bại. Vui lòng TỰ GIẢI Captcha trên trình duyệt...`, 'warning');
+                sendLog(`[Thread ${threadId}] ⏳ Đang chờ bạn giải captcha (tối đa 5 phút)...`, 'info');
                 try {
-                  // Chờ người dùng giải Captcha (Tối đa 5 phút)
-                  await pageGarena.waitForSelector('#tcaptcha_iframe', { state: 'hidden', timeout: 300000 });
-                  sendLog(`[Thread ${threadId}] ✅ Captcha đã biến mất. Đang kiểm tra kết quả...`, 'info');
+                  // Chờ DataDome iframe biến mất (đúng cách) thay vì chờ text trong main frame
+                  await pageGarena.waitForFunction(() => {
+                    const frames = Array.from(document.querySelectorAll('iframe'));
+                    const ddFrame = frames.find(f =>
+                      f.src && (
+                        f.src.includes('datadome') ||
+                        f.src.includes('captcha-delivery') ||
+                        f.src.includes('geo.captcha')
+                      )
+                    );
+                    // Captcha đã giải xong nếu iframe biến mất hoặc ẩn đi
+                    return !ddFrame || ddFrame.offsetParent === null || ddFrame.style.display === 'none';
+                  }, { timeout: 300000 });
+                  sendLog(`[Thread ${threadId}] ✅ Captcha đã được giải phóng. Tiến hành kiểm tra kết quả...`, 'info');
                   await pageGarena.waitForTimeout(3000);
                 } catch (e) {
                   throw new Error("Hết thời gian chờ (5 phút) không thấy giải Captcha.");
                 }
               } else {
-                // Nếu auto kéo thành công
-                await pageGarena.waitForTimeout(3000);
+                await pageGarena.waitForTimeout(2500);
               }
+            } else {
+              sendLog(`[Thread ${threadId}] Không dính Captcha ở lượt này.`);
             }
-            // ── CHỜ KẾT QUẢ ĐĂNG NHẬP ──
-            // ── CHỜ KẾT QUẢ ĐĂNG NHẬP ──
-            sendLog(`[Thread ${threadId}] ⏳ Đang chờ hệ thống chuyển hướng vào trang chủ...`);
-            try {
-              // Đợi tối đa 10s xem URL có chuyển sang account.garena.com không
-              await pageGarena.waitForURL(/account\.garena\.com/, { timeout: 10000 });
-            } catch (e) {
-              // Timeout - có thể do sai tài khoản/mật khẩu nên chưa nhảy trang
-            }
-            await pageGarena.waitForTimeout(2000); // Thêm 2s đệm để trang load hoàn toàn nếu vừa chuyển hướng
 
-            // ── KIỂM TRA KẾT QUẢ ĐĂNG NHẬP ──
+            // ── KIỂM TRA KẾT QUẢ ĐĂNG NHẬP CHỐNG VĂN NGƯỢC LOGIN ──
+            sendLog(`[Thread ${threadId}] ⏳ Đang chờ hệ thống chuyển hướng và xác thực...`);
+            try {
+              await pageGarena.waitForURL(/account\.garena\.com/, { timeout: 12000 });
+            } catch (e) { }
+
+            await pageGarena.waitForTimeout(2500);
+
             const bodyText = await pageGarena.locator('body').innerText().catch(() => '');
             const urlNow = pageGarena.url();
 
-            // 1. Kiểm tra màn hình báo bot hoặc Proxy rác
             if (bodyText.toLowerCase().includes('captcha blocked')) {
               throw new Error("Lỗi Proxy: Proxy này chặn DNS hoặc bị blacklist không thể tải Captcha");
             }
@@ -487,32 +462,30 @@ ipcMain.on('start-run', async (event, config) => {
               throw new Error("Tài khoản bị chặn / Màn hình báo Bot");
             }
 
-            // 2. Đánh giá dựa trên URL hiện tại
-            if (urlNow.includes('account.garena.com') && !urlNow.includes('sso.garena.com/ui/login')) {
-              // Nếu đã vào được trang account.garena.com -> Đăng nhập thành công
+            const isLoginStillVisible = await pageGarena.locator(loginSelectors.username).isVisible().catch(() => false);
+
+            if (urlNow.includes('account.garena.com') && !isLoginStillVisible) {
               loggedIn = true;
-              sendLog(`[Thread ${threadId}] 🎉 Đăng nhập thành công! URL hiện tại: ${urlNow}`);
+              sendLog(`[Thread ${threadId}] 🎉 ĐĂNG NHẬP THÀNH CÔNG THỰC TẾ!`, 'success');
             } else {
-              // Nếu vẫn ở sso.garena.com hoặc bị văng ra link khác -> Đăng nhập thất bại
               if (loginAttempts >= 2) {
                 throw new Error(`Đăng nhập thất bại sau 2 lần thử (URL kẹt ở: ${urlNow})`);
               } else {
-                sendLog(`[Thread ${threadId}] 🔄 Đăng nhập thất bại (URL: ${urlNow}), đang thử lại lần 2...`, 'warning');
-                // Lặp lại vòng while để thử lại
-                await pageGarena.waitForTimeout(2000);
+                sendLog(`[Thread ${threadId}] 🔄 Bị từ chối hoặc văng về trang Login. Đang làm sạch session để đăng nhập lại lần 2...`, 'warning');
+                await context.clearCookies().catch(() => { });
+                await safeGoto(pageGarena, url, { timeout, waitUntil: 'networkidle' });
+                await pageGarena.waitForTimeout(3000);
               }
             }
-          } // End of login loop
+          }
         }
 
-        // ── TIẾN TRÌNH XỬ LÝ CHUYỂN ĐỔI THÔNG TIN GARENA ──
         let generatedPassword = '';
         if (url.includes('garena.com')) {
           const emailUser = account ? account.email : '';
           const emailPass = account ? account.apppassword : '';
           const garenaPass = account ? account.password : '';
 
-          // ── 2. CHUYỂN TRANG BẢO MẬT & CLICK THAY ĐỔI MẬT KHẨU ──
           const securityUrl = 'https://account.garena.com/security';
           sendLog(`[Thread ${threadId}] 🔄 Chuyển sang trang Bảo mật...`);
           await safeGoto(pageGarena, securityUrl, { timeout, waitUntil: 'networkidle' });
@@ -533,7 +506,6 @@ ipcMain.on('start-run', async (event, config) => {
             throw new Error('Đăng nhập thất bại hoặc bị văng (Không tìm thấy nút Thay đổi Mật khẩu).');
           }
 
-          // ── 3. BẤM NÚT LẤY MÃ TRÊN GARENA (ĐÃ UPDATE CLICK THEO ID) ──
           const emailDomain = emailUser.split('@')[1]?.toLowerCase() || '';
           let previousLatestId = null;
           let pageMail = null;
@@ -567,7 +539,6 @@ ipcMain.on('start-run', async (event, config) => {
           sendLog(`[Thread ${threadId}] 📩 Đã kích hoạt bấm nút "Lấy mã" chuẩn xác qua ID.`);
           await delayRand(2000, 3000);
 
-          // ── 4. PHÂN NHÁNH LẤY OTP THEO DOMAIN ──
           let otpCode = '';
 
           if (emailDomain === 'otpgmail.com' || emailDomain === 'gmail.com') {
@@ -592,7 +563,6 @@ ipcMain.on('start-run', async (event, config) => {
             sendLog(`[Thread ${threadId}] ⏳ Chờ 4-6s hòm thư Unlimitmail đồng bộ nhận OTP...`);
             await delayRand(4000, 6000);
 
-            // ── 5. CÀO MÃ OTP THỰC TẾ & KIỂM TRA ĐIỀU KIỆN 8 SỐ ──
             sendLog(`[Thread ${threadId}] 🔍 Đang trích xuất mã OTP từ class code-cell...`);
             await pageMail.waitForSelector('.code-cell', { timeout: 15000 });
 
@@ -660,7 +630,6 @@ ipcMain.on('start-run', async (event, config) => {
             await delayRand(3000, 5000);
 
             let foundId = null;
-            let mailBodyText = "";
 
             for (let i = 1; i <= 6; i++) {
               sendLog(`[Thread ${threadId}] 🔍 Lấy danh sách email qua API (Thử lần ${i})...`);
@@ -676,7 +645,6 @@ ipcMain.on('start-run', async (event, config) => {
                   if (previousLatestId !== null) {
                     isNewMail = (currentLatestId !== previousLatestId);
                   } else {
-                    // Fallback: Nếu không lấy được mốc ID lúc nãy, dùng mốc thời gian < 120s
                     const ageInSeconds = Math.abs(Math.floor(Date.now() / 1000) - listData.result[0].createdAt);
                     isNewMail = (ageInSeconds < 120);
                   }
@@ -714,7 +682,7 @@ ipcMain.on('start-run', async (event, config) => {
               } else {
                 rawHtml = msgData.html || msgData.body || msgData.content || msgText;
               }
-              plainText = rawHtml.replace(/<[^>]*>?/gm, ''); // Xóa toàn bộ thẻ HTML
+              plainText = rawHtml.replace(/<[^>]*>?/gm, '');
             } catch (e) {
               plainText = msgText.replace(/<[^>]*>?/gm, '');
             }
@@ -733,7 +701,6 @@ ipcMain.on('start-run', async (event, config) => {
             throw new Error(`Domain email không được hỗ trợ: ${emailDomain}`);
           }
 
-          // ── 6. QUAY LẠI TAB GARENA ĐỂ ĐIỀN OTP ──
           sendLog(`[Thread ${threadId}] 🔄 Quay lại Tab Garena để điền mã xác thực...`);
           const otpInputSelector = 'input[placeholder*="mã xác thực"], input[placeholder*="Mã xác thực"]';
 
@@ -797,7 +764,6 @@ ipcMain.on('start-run', async (event, config) => {
             await safeGoto(pageGarena, 'https://account.garena.com/', { timeout, waitUntil: 'networkidle' });
           }
 
-          // CẬP NHẬT: Thay đổi selector đăng xuất UI ở luồng chính sang class chuẩn đích danh
           sendLog(`[Thread ${threadId}] 🔍 Đang tìm nút "Đăng xuất" qua class chuẩn...`);
           const dangXuatButton = pageGarena.locator('a.hd-operation:has-text("Đăng xuất")').first();
 
@@ -853,11 +819,10 @@ ipcMain.on('start-run', async (event, config) => {
         } else {
           sendLog(`[Thread ${threadId}] Giữ trình duyệt mở.`);
         }
-      } // End of finally
+      }
 
-      // Delay nhẹ giữa 2 account liên tiếp trên cùng 1 luồng
       await new Promise(res => setTimeout(res, 2000));
-    } // End of while loop
+    }
   };
 
   const tasks = Array.from({ length: Math.min(threads, accountList ? accountList.length : 1) }, (_, i) => runThread(i + 1));
@@ -879,4 +844,18 @@ ipcMain.on('stop-run', async () => {
   isRunning = false;
   if (mainWindow) mainWindow.webContents.send('log', { msg: 'Đã dừng tất cả luồng.', type: 'warning', time: new Date().toLocaleTimeString('vi-VN') });
   if (mainWindow) mainWindow.webContents.send('run-done', { stopped: true });
+});
+
+ipcMain.on('clear-profiles', (event) => {
+  const profilesDir = path.join(app.getPath('userData'), 'automation_profiles');
+  try {
+    if (fs.existsSync(profilesDir)) {
+      fs.rmSync(profilesDir, { recursive: true, force: true });
+      event.reply('clear-profiles-done', { success: true, msg: `Đã xóa toàn bộ profiles tại:\n${profilesDir}` });
+    } else {
+      event.reply('clear-profiles-done', { success: true, msg: 'Không có profiles nào để xóa.' });
+    }
+  } catch (err) {
+    event.reply('clear-profiles-done', { success: false, msg: `Lỗi khi xóa profiles: ${err.message}` });
+  }
 });
