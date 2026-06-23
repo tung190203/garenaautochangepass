@@ -165,8 +165,9 @@ async function solveSimpleSlider(page, sendLog, threadId) {
 // ══════════════════════════════════════════════
 async function _dragSlider(page, slider, iframeElement, totalDistance, sendLog, threadId, frame) {
     try {
-        await slider.hover();
-        await page.waitForTimeout(400 + Math.random() * 200);
+        // Tắt hàm hover mặc định vì nó làm chuột nhảy thẳng tới element (bot behavior)
+        // await slider.hover(); 
+        // await page.waitForTimeout(400 + Math.random() * 200);
 
         const sliderBox = await slider.boundingBox();
         if (!sliderBox) return false;
@@ -185,35 +186,56 @@ async function _dragSlider(page, slider, iframeElement, totalDistance, sendLog, 
 
         sendLog(`[Thread ${threadId}] 🖱️ Bắt đầu kéo Captcha (Human Track Mode)... dist=${Math.round(totalDistance)}px`, 'info');
 
-        await page.mouse.move(startX, startY);
-        await page.waitForTimeout(300 + Math.random() * 100);
+        // Tạo vị trí chuột ngẫu nhiên lúc đầu để mô phỏng người dùng bắt đầu từ chỗ khác
+        const initX = startX + (Math.random() > 0.5 ? 1 : -1) * (Math.random() * 300 + 100);
+        const initY = startY + (Math.random() > 0.5 ? 1 : -1) * (Math.random() * 200 + 100);
+        await page.mouse.move(initX, initY);
+        await page.waitForTimeout(200 + Math.random() * 300);
+
+        // Di chuyển chuột tới điểm bắt đầu của slider một cách từ từ
+        await page.mouse.move(startX, startY, { steps: 15 + Math.floor(Math.random() * 15) });
+        await page.waitForTimeout(200 + Math.random() * 200);
+
         await page.mouse.down();
-        await page.waitForTimeout(150 + Math.random() * 100);
+        await page.waitForTimeout(150 + Math.random() * 150);
 
         // Phân đoạn 1: Kéo nhanh 35% đầu
         const seg1 = totalDistance * 0.35;
-        await page.mouse.move(startX + seg1, startY, { steps: 6 });
+        await page.mouse.move(startX + seg1, startY + (Math.random() * 4 - 2), { steps: 6 + Math.floor(Math.random() * 5) });
         await page.waitForTimeout(50 + Math.random() * 50);
 
-        // Phân đoạn 2: Giảm tốc hình sin + rung trục Y
-        const steps = 18 + Math.floor(Math.random() * 8);
+        // Phân đoạn 2: Giảm tốc tự nhiên (ease-out) + rung lắc
+        const steps = 25 + Math.floor(Math.random() * 15);
         let currentX = startX + seg1;
         let currentY = startY;
 
-        for (let i = 0; i < steps; i++) {
+        for (let i = 1; i <= steps; i++) {
             const progress = i / steps;
             const seg2 = totalDistance * 0.65;
-            const xOffset = Math.sin(progress * Math.PI / 2) * seg2;
+            
+            // Hàm ease-out cubic để giảm tốc tự nhiên
+            const easeOut = 1 - Math.pow(1 - progress, 3);
+            const xOffset = easeOut * seg2;
+            
             currentX = startX + seg1 + xOffset;
-            const yJitter = (Math.random() - 0.5) * 6;
+            
+            // Rung lắc nhẹ trên trục Y và X
+            const yJitter = (Math.random() - 0.5) * 5;
+            const xJitter = (Math.random() - 0.5) * 2;
+            
             currentY = startY + yJitter;
-            await page.mouse.move(currentX, currentY);
-            await page.waitForTimeout(Math.random() * 10 + 8);
+            
+            await page.mouse.move(currentX + xJitter, currentY, { steps: 1 });
+            await page.waitForTimeout(Math.random() * 15 + 10);
         }
 
-        // Phân đoạn 3: Về đích chính xác
-        await page.mouse.move(startX + totalDistance, startY, { steps: 4 });
-        await page.waitForTimeout(400 + Math.random() * 200);
+        // Phân đoạn 3: Kéo lố một chút rồi lùi lại (overshoot correction)
+        const overshoot = Math.random() * 5 + 2;
+        await page.mouse.move(startX + totalDistance + overshoot, startY + (Math.random() * 2 - 1), { steps: 3 + Math.floor(Math.random() * 3) });
+        await page.waitForTimeout(100 + Math.random() * 100);
+        
+        await page.mouse.move(startX + totalDistance, startY + (Math.random() * 2 - 1), { steps: 3 + Math.floor(Math.random() * 3) });
+        await page.waitForTimeout(300 + Math.random() * 200);
         await page.mouse.up();
 
         sendLog(`[Thread ${threadId}] Đã nhả chuột. Đang chờ kết quả...`, 'info');

@@ -452,8 +452,18 @@ ipcMain.on('start-run', async (event, config) => {
             const bodyText = await pageGarena.locator('body').innerText().catch(() => '');
             const urlNow = pageGarena.url();
 
-            if (bodyText.toLowerCase().includes('captcha blocked')) {
-              throw new Error("Lỗi Proxy: Proxy này chặn DNS hoặc bị blacklist không thể tải Captcha");
+            if (bodyText.toLowerCase().includes('captcha blocked') || bodyText.toLowerCase().includes('vui lòng tắt trình chặn quảng cáo')) {
+                sendLog(`[Thread ${threadId}] ⚠️ Bị lỗi "CAPTCHA blocked" do Proxy. Tự động bypass: Click lại Đăng nhập...`, 'warning');
+                
+                if (loginSelectors.submit) {
+                    // Bấm lại nút Đăng nhập lần 2 (Workaround)
+                    await pageGarena.locator(loginSelectors.submit).hover();
+                    await pageGarena.waitForTimeout(Math.floor(Math.random() * (400 - 150 + 1)) + 150);
+                    await pageGarena.locator(loginSelectors.submit).click({ delay: Math.floor(Math.random() * (200 - 100 + 1)) + 100 });
+                    
+                    sendLog(`[Thread ${threadId}] Đã click Submit lần 2 để ép qua lỗi DNS. Đang chờ...`);
+                    await pageGarena.waitForTimeout(Math.floor(Math.random() * (4000 - 2500 + 1)) + 2500);
+                }
             }
 
             const botKeywords = ['bất thường', 'phát hiện', 'suspicious', 'bị khóa', 'locked', 'khóa tài khoản'];
@@ -532,10 +542,26 @@ ipcMain.on('start-run', async (event, config) => {
           const layMaButton = pageGarena.locator('#J-getotp-trigger').first();
 
           await layMaButton.waitFor({ state: 'visible', timeout: 10000 });
-          await layMaButton.hover();
-          await delayRand(300, 600);
 
-          await layMaButton.click({ delay: Math.floor(Math.random() * 100) + 50 });
+          sendLog(`[Thread ${threadId}] 🖱️ Bắt đầu fake thao tác chuột để qua mặt DataDome...`);
+          // 1. Di chuyển chuột ngẫu nhiên trên màn hình trước
+          const box = await layMaButton.boundingBox();
+          if (box) {
+              const startX = box.x - (Math.random() * 200 + 100); // Cách nút 100-300px
+              const startY = box.y + (Math.random() * 100 - 50);
+              await pageGarena.mouse.move(startX, startY, { steps: 10 + Math.floor(Math.random() * 10) });
+              await delayRand(200, 500);
+              
+              // 2. Di chuyển từ từ vào nút Lấy mã
+              const targetX = box.x + box.width / 2 + (Math.random() * 10 - 5);
+              const targetY = box.y + box.height / 2 + (Math.random() * 10 - 5);
+              await pageGarena.mouse.move(targetX, targetY, { steps: 15 + Math.floor(Math.random() * 15) });
+          } else {
+              await layMaButton.hover(); // Fallback nếu không tính được box
+          }
+
+          await delayRand(400, 800);
+          await layMaButton.click({ delay: Math.floor(Math.random() * 120) + 80 });
           sendLog(`[Thread ${threadId}] 📩 Đã kích hoạt bấm nút "Lấy mã" chuẩn xác qua ID.`);
           await delayRand(2000, 3000);
 

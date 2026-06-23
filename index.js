@@ -172,9 +172,10 @@ async function runThread(threadId) {
     let loginAttempts = 0;
     let loggedIn = false;
 
-    while (loginAttempts < 2 && !loggedIn) {
+    // Tăng số lần thử lên 3 để đối phó lỗi Proxy
+    while (loginAttempts < 3 && !loggedIn) {
       loginAttempts++;
-      console.log(`[Thread ${threadId}] Bắt đầu quy trình đăng nhập (Lần ${loginAttempts}/2)...`);
+      console.log(`[Thread ${threadId}] Bắt đầu quy trình đăng nhập (Lần ${loginAttempts}/3)...`);
 
       await pageGarena.waitForSelector(usernameSelector, { timeout: 10000 });
       await pageGarena.locator(usernameSelector).click({ delay: Math.floor(Math.random() * 100) + 50 });
@@ -238,8 +239,21 @@ async function runThread(threadId) {
 
       await pageGarena.waitForTimeout(2500);
 
-      const bodyText = await pageGarena.locator('body').innerText().catch(() => '');
+      let bodyText = await pageGarena.locator('body').innerText().catch(() => '');
       const urlNow = pageGarena.url();
+
+      // ── BỔ SUNG: TỰ ĐỘNG CLICK LẠI NẾU PROXY LỖI CHỮ ĐỎ ──
+      if (bodyText.toLowerCase().includes('captcha blocked') || bodyText.toLowerCase().includes('vui lòng tắt trình chặn quảng cáo')) {
+        console.log(`[Thread ${threadId}] ⚠️ Bị lỗi "CAPTCHA blocked" do Proxy. Tự động nhấn lại Enter...`);
+        await pageGarena.locator(passwordSelector).focus();
+        await delayRand(200, 400);
+        await pageGarena.locator(passwordSelector).press('Enter');
+        console.log(`[Thread ${threadId}] Đã nhấn Enter lần 2 để ép qua lỗi DNS.`);
+        await delayRand(3000, 5000);
+        
+        // Cập nhật lại bodyText sau khi nhấn lần 2
+        bodyText = await pageGarena.locator('body').innerText().catch(() => '');
+      }
 
       const botKeywords = ['bất thường', 'phát hiện', 'suspicious', 'bị khóa', 'locked', 'khóa tài khoản'];
       const isBotDetected = botKeywords.some(kw => bodyText.toLowerCase().includes(kw));
@@ -253,10 +267,10 @@ async function runThread(threadId) {
         loggedIn = true;
         console.log(`[Thread ${threadId}] 🎉 ĐĂNG NHẬP THÀNH CÔNG THỰC TẾ!`);
       } else {
-        if (loginAttempts >= 2) {
-          throw new Error(`Đăng nhập thất bại hoàn toàn sau 2 lần thử (URL kẹt: ${urlNow})`);
+        if (loginAttempts >= 3) {
+          throw new Error(`Đăng nhập thất bại hoàn toàn sau 3 lần thử (URL kẹt: ${urlNow})`);
         } else {
-          console.log(`[Thread ${threadId}] 🔄 Bị đẩy ngược về trang Login. Đang dọn dẹp cookie thử lại lần 2...`);
+          console.log(`[Thread ${threadId}] 🔄 Bị đẩy ngược về trang Login. Đang dọn dẹp cookie thử lại...`);
           await context.clearCookies().catch(() => { });
           await safeGoto(pageGarena, CONFIG.TARGET_URL, { timeout: CONFIG.TIMEOUT, waitUntil: 'networkidle' });
           await pageGarena.waitForTimeout(3000);
@@ -285,7 +299,7 @@ async function runThread(threadId) {
       throw new Error('Đăng nhập thất bại hoặc bị văng (Không tìm thấy nút Thay đổi Mật khẩu).');
     }
 
-    // ── 3. BẤM NÚT LẤY MÃ TRÊN GARENA (ĐÃ SỬA NHẮM TRÚNG ID CỨNG) ──
+    // ── 3. BẤM NÚT LẤY MÃ TRÊN GARENA (MÔ PHỎNG NGƯỜI THẬT) ──
     const emailDomain = emailUser.split('@')[1]?.toLowerCase() || '';
     let previousLatestId = null;
     let pageMail = null;
@@ -312,11 +326,28 @@ async function runThread(threadId) {
     const layMaButton = pageGarena.locator('#J-getotp-trigger').first();
 
     await layMaButton.waitFor({ state: 'visible', timeout: 10000 });
-    await layMaButton.hover();
-    await delayRand(300, 600);
+    console.log(`[Thread ${threadId}] 🖱️ Đang giả lập đường đi của chuột để qua mặt DataDome...`);
 
-    await layMaButton.click({ delay: Math.floor(Math.random() * 100) + 50 });
-    console.log(`[Thread ${threadId}] 📩 Đã bấm kích hoạt nút "Lấy mã" chuẩn xác.`);
+    // Tính toán tọa độ hộp của nút để rê chuột mượt mà
+    const box = await layMaButton.boundingBox();
+    if (box) {
+        // Tạo một điểm bắt đầu ngẫu nhiên cách xa nút bấm từ 100px - 300px
+        const startX = box.x - (Math.random() * 200 + 100);
+        const startY = box.y + (Math.random() * 100 - 50);
+        await pageGarena.mouse.move(startX, startY, { steps: 10 + Math.floor(Math.random() * 10) });
+        await delayRand(200, 400);
+        
+        // Rê chuột từ từ vào chính giữa nút (lệch ngẫu nhiên vài pixel cho giống người)
+        const targetX = box.x + box.width / 2 + (Math.random() * 10 - 5);
+        const targetY = box.y + box.height / 2 + (Math.random() * 10 - 5);
+        await pageGarena.mouse.move(targetX, targetY, { steps: 15 + Math.floor(Math.random() * 15) });
+    } else {
+        await layMaButton.hover(); // Cơ chế dự phòng
+    }
+
+    await delayRand(400, 800);
+    await layMaButton.click({ delay: Math.floor(Math.random() * 120) + 80 });
+    console.log(`[Thread ${threadId}] 📩 Đã bấm kích hoạt nút "Lấy mã" thành công.`);
     await delayRand(2000, 3000);
 
     // ── 4. PHÂN NHÁNH LẤY OTP THEO DOMAIN ──
