@@ -70,6 +70,7 @@
   ],
   "license": "ISC",
   "dependencies": {
+    "ghost-cursor": "^1.4.2",
     "playwright": "^1.40.0",
     "playwright-extra": "^4.3.6",
     "png-to-ico": "^3.0.1",

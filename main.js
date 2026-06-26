@@ -3,6 +3,7 @@ const path = require('path');
 const { chromium } = require('playwright-extra');
 const stealth = require('puppeteer-extra-plugin-stealth')();
 chromium.use(stealth);
+const { createCursor } = require("ghost-cursor");
 const fs = require('fs');
 const { solveSimpleSlider } = require('./autoSlider');
 
@@ -216,16 +217,18 @@ ipcMain.on('start-run', async (event, config) => {
 
       const browserPath = getBrowserExecutablePath();
       const launchOptions = {
-        headless,
+        headless: false, // Bắt buộc chạy Headful theo đề xuất 4
         slowMo,
         executablePath: browserPath,
-        viewport: fp.viewport,
-        userAgent: fp.userAgent,
+        viewport: null, // Để null để trình duyệt tự lấy size cửa sổ thực tế
+        // Không set cứng userAgent để Chrome tự động khớp User-Agent với Sec-CH-UA (Client Hints)
         args: [
           '--disable-blink-features=AutomationControlled',
           '--disable-infobars',
           '--no-sandbox',
-          '--disable-setuid-sandbox'
+          '--disable-setuid-sandbox',
+          `--window-size=${fp.viewport.width},${fp.viewport.height}`,
+          '--disable-features=IsolateOrigins,site-per-process' // Hỗ trợ iframe Datadome
         ],
         ignoreDefaultArgs: ['--enable-automation']
       };
@@ -246,25 +249,8 @@ ipcMain.on('start-run', async (event, config) => {
         context = await chromium.launchPersistentContext(userDataDir, launchOptions);
         activeContexts.push(context);
 
-        await context.addInitScript((fingerprint) => {
-          Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => fingerprint.hardwareConcurrency });
-          Object.defineProperty(navigator, 'deviceMemory', { get: () => fingerprint.deviceMemory });
-
-          const originalGetContext = HTMLCanvasElement.prototype.getContext;
-          HTMLCanvasElement.prototype.getContext = function (type, ...args) {
-            const context = originalGetContext.apply(this, [type, ...args]);
-            if (type === '2d') {
-              const originalFillText = context.fillText;
-              context.fillText = function (...fillTextArgs) {
-                originalFillText.apply(this, fillTextArgs);
-                this.fillStyle = `rgba(${fingerprint.canvasNoise.r}, ${fingerprint.canvasNoise.g}, ${fingerprint.canvasNoise.b}, ${fingerprint.canvasNoise.a})`;
-                this.fillRect(0, 0, 1, 1);
-              };
-            }
-            return context;
-          };
-        }, fp);
-
+        // Đã xóa addInitScript vì dùng Object.defineProperty đè phần cứng sẽ bị DataDome vạch trần ngay lập tức.
+        
         const pageGarena = context.pages()[0] || await context.newPage();
         const delayRand = (min, max) => new Promise(res => setTimeout(res, Math.floor(Math.random() * (max - min + 1)) + min));
 
@@ -449,8 +435,8 @@ ipcMain.on('start-run', async (event, config) => {
 
             await pageGarena.waitForTimeout(2500);
 
-            const bodyText = await pageGarena.locator('body').innerText().catch(() => '');
-            const urlNow = pageGarena.url();
+            let bodyText = await pageGarena.locator('body').innerText().catch(() => '');
+            let urlNow = pageGarena.url();
 
             if (bodyText.toLowerCase().includes('captcha blocked') || bodyText.toLowerCase().includes('vui lòng tắt trình chặn quảng cáo')) {
                 sendLog(`[Thread ${threadId}] ⚠️ Bị lỗi "CAPTCHA blocked" do Proxy. Tự động bypass: Click lại Đăng nhập...`, 'warning');
@@ -462,7 +448,11 @@ ipcMain.on('start-run', async (event, config) => {
                     await pageGarena.locator(loginSelectors.submit).click({ delay: Math.floor(Math.random() * (200 - 100 + 1)) + 100 });
                     
                     sendLog(`[Thread ${threadId}] Đã click Submit lần 2 để ép qua lỗi DNS. Đang chờ...`);
-                    await pageGarena.waitForTimeout(Math.floor(Math.random() * (4000 - 2500 + 1)) + 2500);
+                    await pageGarena.waitForTimeout(Math.floor(Math.random() * (5000 - 3500 + 1)) + 3500); // Tăng thời gian chờ thêm 1 chút
+                    
+                    // Lấy lại dữ liệu trang mới sau khi click
+                    bodyText = await pageGarena.locator('body').innerText().catch(() => '');
+                    urlNow = pageGarena.url();
                 }
             }
 
@@ -543,25 +533,39 @@ ipcMain.on('start-run', async (event, config) => {
 
           await layMaButton.waitFor({ state: 'visible', timeout: 10000 });
 
-          sendLog(`[Thread ${threadId}] 🖱️ Bắt đầu fake thao tác chuột để qua mặt DataDome...`);
-          // 1. Di chuyển chuột ngẫu nhiên trên màn hình trước
-          const box = await layMaButton.boundingBox();
-          if (box) {
-              const startX = box.x - (Math.random() * 200 + 100); // Cách nút 100-300px
-              const startY = box.y + (Math.random() * 100 - 50);
-              await pageGarena.mouse.move(startX, startY, { steps: 10 + Math.floor(Math.random() * 10) });
-              await delayRand(200, 500);
-              
-              // 2. Di chuyển từ từ vào nút Lấy mã
-              const targetX = box.x + box.width / 2 + (Math.random() * 10 - 5);
-              const targetY = box.y + box.height / 2 + (Math.random() * 10 - 5);
-              await pageGarena.mouse.move(targetX, targetY, { steps: 15 + Math.floor(Math.random() * 15) });
-          } else {
-              await layMaButton.hover(); // Fallback nếu không tính được box
+          sendLog(`[Thread ${threadId}] 🖱️ Bắt đầu fake thao tác chuột bằng ghost-cursor...`);
+          // Note: ghost-cursor được thiết kế cho Puppeteer, khi chạy với Playwright có thể cần truyền cursor builder riêng.
+          // Để fix lỗi 'this.page.browser is not a function', ta truyền context thay vì page hoặc dùng cách truyền thống hơn nếu lỗi.
+          let cursor;
+          try {
+              cursor = createCursor(pageGarena);
+          } catch(e) {
+              // Fallback nếu ghost-cursor không tương thích phiên bản Playwright hiện tại
+              cursor = null;
           }
-
           await delayRand(400, 800);
-          await layMaButton.click({ delay: Math.floor(Math.random() * 120) + 80 });
+          
+          if (cursor) {
+              await cursor.click('#J-getotp-trigger').catch(async () => {
+                  await layMaButton.click({ delay: Math.floor(Math.random() * 120) + 80 });
+              });
+          } else {
+               // Fake chuột thủ công nâng cao như phiên bản trước (Fallback)
+              const box = await layMaButton.boundingBox();
+              if (box) {
+                  const startX = box.x - (Math.random() * 100 + 50);
+                  const startY = box.y + (Math.random() * 50 - 25);
+                  await pageGarena.mouse.move(startX, startY, { steps: 10 + Math.floor(Math.random() * 5) });
+                  await delayRand(150, 300);
+                  const targetX = box.x + box.width / 2 + (Math.random() * 10 - 5);
+                  const targetY = box.y + box.height / 2 + (Math.random() * 10 - 5);
+                  await pageGarena.mouse.move(targetX, targetY, { steps: 10 + Math.floor(Math.random() * 10) });
+              } else {
+                  await layMaButton.hover();
+              }
+              await delayRand(200, 400);
+              await layMaButton.click({ delay: Math.floor(Math.random() * 100) + 80 });
+          }
           sendLog(`[Thread ${threadId}] 📩 Đã kích hoạt bấm nút "Lấy mã" chuẩn xác qua ID.`);
           await delayRand(2000, 3000);
 
