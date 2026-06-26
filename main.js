@@ -839,6 +839,11 @@ ipcMain.on('start-run', async (event, config) => {
           time: new Date().toLocaleString('vi-VN'),
         };
         results.push(result);
+
+        if (outputDir) {
+          try { fs.appendFileSync(path.join(outputDir, 'error.txt'), (result.oldAccountStr || result.account) + '\n', 'utf8'); } catch (e) { }
+        }
+
         sendLog(`[Thread ${threadId}] FAILED — ${err.message}`, 'error');
         event.reply('thread-done', { threadId, status: 'error' });
       } finally {
