@@ -268,9 +268,9 @@ ipcMain.on('start-run', async (event, config) => {
         };
 
         if (isNewProfile) {
-          sendLog(`[Thread ${threadId}] 🆕 Profile MỚI: Bắt đầu quá trình nuôi 3-5 phút...`, 'warning');
+          sendLog(`[Thread ${threadId}] 🆕 Profile MỚI: Bắt đầu quá trình nuôi 1-3 phút...`, 'warning');
           try {
-            const warmUpTimeMs = Math.floor(Math.random() * (300000 - 180000 + 1)) + 180000;
+            const warmUpTimeMs = Math.floor(Math.random() * (180000 - 60000 + 1)) + 60000;
             const startTime = Date.now();
 
             const sites = [
@@ -851,6 +851,15 @@ ipcMain.on('start-run', async (event, config) => {
           if (context) await context.close();
           activeContexts = activeContexts.filter(c => c !== context);
           sendLog(`[Thread ${threadId}] Đóng phiên của ${account.username}.`);
+          
+          try {
+            if (fs.existsSync(userDataDir)) {
+              fs.rmSync(userDataDir, { recursive: true, force: true });
+              sendLog(`[Thread ${threadId}] 🗑️ Đã tự động xóa profile để giải phóng bộ nhớ.`);
+            }
+          } catch (e) {
+            sendLog(`[Thread ${threadId}] ⚠️ Lỗi khi xóa profile: ${e.message}`, 'warning');
+          }
         } else {
           sendLog(`[Thread ${threadId}] Giữ trình duyệt mở.`);
         }
